@@ -13,9 +13,10 @@ fi
 
 # pip bootstrappen falls im venv nicht vorhanden (Debian: ensurepip nicht verfügbar)
 if ! "$VENV/bin/python" -m pip --version &>/dev/null 2>&1; then
-  echo "Bootstrap pip..."
-  SITE=$("$VENV/bin/python" -c "import sysconfig; print(sysconfig.get_path('purelib'))")
-  python3 -m pip install -q --target "$SITE" pip setuptools wheel
+  echo "Bootstrap pip via get-pip.py..."
+  curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+  "$VENV/bin/python" /tmp/get-pip.py --quiet
+  rm -f /tmp/get-pip.py
 fi
 
 # Abhängigkeiten installieren/aktualisieren
