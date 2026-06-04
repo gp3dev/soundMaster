@@ -6,7 +6,7 @@ from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import db as database
@@ -42,16 +42,6 @@ def _measurement_to_dict(m) -> dict:
         "overflow": m.overflow,
         "underflow": m.underflow,
     }
-
-
-@app.get("/", include_in_schema=False)
-def web_index():
-    return FileResponse(os.path.join(_WEB_DIR, "index.html"))
-
-
-@app.get("/live", include_in_schema=False)
-def web_live():
-    return FileResponse(os.path.join(_WEB_DIR, "live.html"))
 
 
 @app.get("/health")
@@ -110,7 +100,7 @@ def stats(minutes: int = Query(60, ge=1, le=10080, description="Statistics windo
     }
 
 
-app.mount("/", StaticFiles(directory=_WEB_DIR), name="web")
+app.mount("/", StaticFiles(directory=_WEB_DIR, html=True), name="web")
 
 
 class ApiServer:

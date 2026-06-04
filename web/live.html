@@ -6,6 +6,7 @@
   <title>SoundMaster · Live</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <link rel="stylesheet" href="/nav.css">
   <script src="/nav.js" defer></script>
   <style>
     :root {
@@ -31,43 +32,6 @@
       flex-direction: column;
       gap: 12px;
     }
-
-    /* ── Nav ── */
-    .nav-wrap { position: relative; }
-    .burger {
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--text);
-      width: 36px; height: 36px;
-      border-radius: 4px;
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      padding: 0; flex-shrink: 0;
-    }
-    .burger:hover { background: var(--surface); }
-    .nav-menu {
-      display: none;
-      position: absolute;
-      top: 42px; left: 0;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      min-width: 190px;
-      z-index: 200;
-      box-shadow: 0 8px 24px rgba(0,0,0,.6);
-      overflow: hidden;
-    }
-    .nav-menu.open { display: block; }
-    .nav-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 11px 16px;
-      color: var(--text); text-decoration: none; font-size: 14px;
-      border-bottom: 1px solid var(--border);
-      transition: background .1s;
-    }
-    .nav-item:last-child { border-bottom: none; }
-    .nav-item:hover { background: rgba(255,255,255,.05); }
-    .nav-item.active { color: var(--blue); }
 
     /* ── Header ── */
     header {
@@ -264,10 +228,8 @@
 'use strict';
 
 const BUFFER = [];   // {x: ms, y: db}
-let windowMin = 10;
 let lastTsUnix = 0;
 let chart = null;
-let staleTimer = null;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -337,21 +299,26 @@ function initChart() {
 }
 
 function updateChart() {
-  const now    = Date.now();
-  const cutoff = now - windowMin * 60_000;
+  const now      = Date.now();
+  const windowMin = parseInt(document.getElementById('inp-win').value, 10);
+  const cutoff   = now - windowMin * 60_000;
 
-  // Trim buffer to current window
-  while (BUFFER.length && BUFFER[0].x < cutoff) BUFFER.shift();
+  const keep = BUFFER.findIndex(p => p.x >= cutoff);
+  if (keep > 0) BUFFER.splice(0, keep);
+  else if (keep === -1) BUFFER.length = 0;
 
   chart.data.datasets[0].data = BUFFER;
   chart.options.scales.x.min = cutoff;
   chart.options.scales.x.max = now;
 
   if (BUFFER.length > 0) {
-    const vals = BUFFER.map(p => p.y);
-    const min  = vals.reduce((a, b) => Math.min(a, b),  Infinity);
-    const max  = vals.reduce((a, b) => Math.max(a, b), -Infinity);
-    const avg  = vals.reduce((a, b) => a + b, 0) / vals.length;
+    let min = Infinity, max = -Infinity, sum = 0;
+    for (const p of BUFFER) {
+      if (p.y < min) min = p.y;
+      if (p.y > max) max = p.y;
+      sum += p.y;
+    }
+    const avg = sum / BUFFER.length;
     chart.options.scales.y.min = Math.max(0, Math.floor(min - 3));
     chart.options.scales.y.max = Math.ceil(max + 3);
     setStats(min, max, avg, BUFFER.length);
@@ -364,6 +331,7 @@ function updateChart() {
 
 async function loadInitial() {
   try {
+    const windowMin = parseInt(document.getElementById('inp-win').value, 10);
     const resp = await fetch(`/history?minutes=${windowMin}&limit=1000`);
     if (!resp.ok) return;
     const json = await resp.json();
@@ -394,6 +362,9 @@ async function pollCurrent() {
     }
   } catch (_) { markLive(false); }
 
+  const stale = lastTsUnix === 0 || (Date.now() / 1000 - lastTsUnix > 5);
+  document.getElementById('disp-db').classList.toggle('stale', stale);
+
   setTimeout(pollCurrent, 2_000);
 }
 
@@ -422,12 +393,6 @@ function updateDisplay(m) {
     `dB(${m.weighting}) · ${m.response}`;
   document.getElementById('disp-time').textContent =
     new Date(m.ts_unix * 1000).toLocaleTimeString('de-DE');
-
-  // Mark stale after 5s without update
-  clearTimeout(staleTimer);
-  staleTimer = setTimeout(() => {
-    document.getElementById('disp-db').classList.add('stale');
-  }, 5_000);
 }
 
 function markLive(active) {
@@ -448,11 +413,16 @@ function setStats(min, max, avg, count) {
 // ── Window change ─────────────────────────────────────────────────────────────
 
 async function onWindowChange() {
-  windowMin = parseInt(document.getElementById('inp-win').value);
-  // Reload history for larger window (buffer may not have old data)
-  BUFFER.length = 0;
-  lastTsUnix = 0;
-  await loadInitial();
+  const windowMin  = parseInt(document.getElementById('inp-win').value, 10);
+  const newCutoff  = Date.now() - windowMin * 60_000;
+  const bufferedFrom = BUFFER.length ? BUFFER[0].x : Infinity;
+  if (newCutoff < bufferedFrom) {
+    BUFFER.length = 0;
+    lastTsUnix = 0;
+    await loadInitial();
+  } else {
+    updateChart();
+  }
 }
 </script>
 </body>
