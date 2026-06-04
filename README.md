@@ -1,5 +1,7 @@
 # SoundMaster
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Langzeit-Datenerfassung für den **Laserliner SoundTest-Master (082.070A)** Schallpegelmesser via USB-Seriell. Speichert Messwerte in SQLite, stellt eine REST-API bereit und zeigt Echtzeit-Daten in einer Terminal-Oberfläche (TUI) sowie einem Web-Dashboard an.
 
 ## Features
@@ -17,9 +19,27 @@ Langzeit-Datenerfassung für den **Laserliner SoundTest-Master (082.070A)** Scha
 - Laserliner SoundTest-Master angeschlossen an `/dev/ttyUSB0`
 - Benutzer in der Gruppe `dialout` (`sudo usermod -aG dialout $USER`)
 
-## Installation
+## Schnellstart
+
+`start.sh` übernimmt alles auf einmal: Virtualenv anlegen, pip bootstrappen (funktioniert auch auf Debian ohne `ensurepip`), Abhängigkeiten installieren und die App starten.
 
 ```bash
+./start.sh
+```
+
+Alle Argumente werden direkt an `main.py` weitergereicht:
+
+```bash
+./start.sh --port /dev/ttyUSB1
+./start.sh --no-tui
+./start.sh --probe
+```
+
+## Manuelle Installation
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -117,4 +137,4 @@ config.toml    Standardkonfiguration
 
 ## Lizenz
 
-Privat / nicht veröffentlicht.
+[MIT License](LICENSE) — Copyright (c) 2026 gp3dev
