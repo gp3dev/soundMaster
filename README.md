@@ -125,14 +125,20 @@ Sync-Strategie: Suche den 8-Byte-Anker ab Offset 6, gehe 6 Bytes zurück für de
 ## Projektstruktur
 
 ```
-main.py        Einstiegspunkt, Thread-Orchestrierung
-reader.py      Serieller Empfang & Protokoll-Dekodierung
-api.py         FastAPI REST-API & statische Web-Dateien
-db.py          SQLite-Datenbank (Lesen/Schreiben/Statistiken)
-config.py      Konfigurationsladung (TOML + CLI-Argumente)
-tui.py         Textual-TUI mit Live-Graph
-web/           Web-Dashboard (HTML/CSS/JS)
-config.toml    Standardkonfiguration
+main.py              Einstiegspunkt, Thread-Orchestrierung
+reader.py            Serieller Empfang & Protokoll-Dekodierung
+api.py               FastAPI REST-API & statische Web-Dateien
+db.py                SQLite-Datenbank (Lesen/Schreiben/Statistiken)
+config.py            Konfigurationsladung (TOML + CLI-Argumente)
+tui.py               Textual-TUI mit Live-Graph
+web/
+  index.html         Web-Dashboard (Verlaufsdiagramm)
+  live.html          Echtzeit-Ansicht
+  settings.html      Einstellungsseite (TA-Lärm-Grenzwerte)
+  nav.css / nav.js   Navigation
+config.toml          Standardkonfiguration
+requirements.txt     Python-Abhängigkeiten
+start.sh             Bootstrap-Skript (venv + pip + start)
 ```
 
 ## Lizenz
