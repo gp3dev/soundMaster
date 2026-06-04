@@ -1,0 +1,5 @@
+pyserial>=3.5
+textual>=0.80
+textual-plotext>=0.2
+fastapi>=0.111
+uvicorn>=0.30
