@@ -6,7 +6,7 @@ from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import db as database
@@ -42,6 +42,11 @@ def _measurement_to_dict(m) -> dict:
         "overflow": m.overflow,
         "underflow": m.underflow,
     }
+
+
+@app.get("/live", include_in_schema=False)
+def web_live():
+    return FileResponse(os.path.join(_WEB_DIR, "live.html"))
 
 
 @app.get("/health")
