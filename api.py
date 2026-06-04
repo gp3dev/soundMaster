@@ -49,6 +49,11 @@ def web_live():
     return FileResponse(os.path.join(_WEB_DIR, "live.html"))
 
 
+@app.get("/settings", include_in_schema=False)
+def web_settings():
+    return FileResponse(os.path.join(_WEB_DIR, "settings.html"))
+
+
 @app.get("/health")
 def health():
     return {
