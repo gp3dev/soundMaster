@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoundMaster</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <style>
+    :root {
+      --bg:      #1a1a1a;
+      --surface: #242424;
+      --border:  #333;
+      --text:    #ddd;
+      --muted:   #777;
+      --green:   #4caf50;
+      --blue:    #0178d4;
+      --red:     #e53935;
+      --yellow:  #ffc107;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background .3s;
+    }
+    .dot.ok { background: var(--green); }
+    .dot.err { background: var(--red); }
+    .live {
+      margin-left: auto;
+      text-align: right;
+    }
+    .live-db {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--green);
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    .live-db.over { color: var(--red); }
+    .live-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Controls ── */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    .ctrl { display: flex; align-items: center; gap: 5px; }
+    .ctrl label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    input[type=date], input[type=time], select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    input[type=date]:focus, input[type=time]:focus, select:focus {
+      outline: 1px solid var(--blue);
+    }
+    input[type=checkbox] { width: 14px; height: 14px; accent-color: var(--blue); }
+    .btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .spinner {
+      width: 12px; height: 12px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: none;
+    }
+    .btn.loading .spinner { display: block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ctrl-right { margin-left: auto; }
+
+    /* ── Chart ── */
+    .chart-wrap {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      flex: 1;
+      min-height: 300px;
+    }
+    .chart-wrap canvas { display: block; }
+    .empty-msg {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 15px;
+      pointer-events: none;
+    }
+
+    /* ── Stats ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    @media (max-width: 600px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+    }
+    .stat-lbl {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--muted);
+    }
+    .stat-val {
+      font-size: 24px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      margin-top: 3px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>SoundMaster</h1>
+  <div class="status">
+    <div class="dot" id="dot"></div>
+    <span id="status-txt">–</span>
+  </div>
+  <div class="live">
+    <div class="live-db" id="live-db">–</div>
+    <div class="live-meta" id="live-meta">–</div>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="ctrl">
+    <label for="inp-date">Datum</label>
+    <input type="date" id="inp-date">
+  </div>
+  <div class="ctrl">
+    <label for="inp-time">Von</label>
+    <input type="time" id="inp-time" value="08:00">
+  </div>
+  <div class="ctrl">
+    <label for="inp-dur">Dauer</label>
+    <select id="inp-dur">
+      <option value="1">1 Stunde</option>
+      <option value="3">3 Stunden</option>
+      <option value="6">6 Stunden</option>
+      <option value="12">12 Stunden</option>
+      <option value="24" selected>24 Stunden</option>
+      <option value="48">48 Stunden</option>
+      <option value="168">7 Tage</option>
+    </select>
+  </div>
+  <button class="btn" id="load-btn" onclick="loadData()">
+    <div class="spinner" id="spin"></div>
+    Laden
+  </button>
+  <div class="ctrl ctrl-right">
+    <label for="inp-auto">Auto-Refresh</label>
+    <input type="checkbox" id="inp-auto" checked>
+  </div>
+</div>
+
+<div class="chart-wrap">
+  <canvas id="chart"></canvas>
+  <div class="empty-msg" id="empty-msg">Keine Daten im gewählten Zeitraum</div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-lbl">Minimum</div>
+    <div class="stat-val" id="s-min" style="color:var(--green)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Maximum</div>
+    <div class="stat-val" id="s-max" style="color:var(--red)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Mittelwert</div>
+    <div class="stat-val" id="s-avg" style="color:var(--blue)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Messungen</div>
+    <div class="stat-val" id="s-cnt" style="color:var(--muted)">–</div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+let chart = null;
+let autoTimer = null;
+let liveTimer = null;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('inp-date').value = todayStr();
+  initChart();
+  loadData();
+  scheduleLive();
+  setupAutoRefresh();
+});
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ── Chart ─────────────────────────────────────────────────────────────────────
+
+function initChart() {
+  const ctx = document.getElementById('chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [{
+        data: [],
+        borderColor: '#4caf50',
+        backgroundColor: 'rgba(76,175,80,0.07)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#111',
+          borderColor: '#333',
+          borderWidth: 1,
+          padding: 8,
+          callbacks: {
+            title(items) {
+              const d = new Date(items[0].parsed.x);
+              return d.toLocaleString('de-DE', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+              });
+            },
+            label(item) {
+              return `  ${item.parsed.y.toFixed(1)} dB`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: {
+            displayFormats: {
+              second:      'HH:mm:ss',
+              minute:      'HH:mm',
+              hour:        'HH:mm',
+              day:         'dd.MM.',
+            }
+          },
+          grid:  { color: '#2a2a2a' },
+          ticks: { color: '#555', maxTicksLimit: 10 }
+        },
+        y: {
+          grid:  { color: '#2a2a2a' },
+          ticks: { color: '#555', callback: v => v + ' dB' }
+        }
+      }
+    }
+  });
+}
+
+// ── Load history ──────────────────────────────────────────────────────────────
+
+async function loadData() {
+  const btn  = document.getElementById('load-btn');
+  const spin = document.getElementById('spin');
+  const emptyMsg = document.getElementById('empty-msg');
+
+  btn.disabled = true;
+  btn.classList.add('loading');
+  emptyMsg.style.display = 'none';
+
+  try {
+    const { since, until } = getRange();
+    const url = `/history?since=${since.toISOString()}&until=${until.toISOString()}&limit=10000`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+
+    const pts = json.data
+      .map(m => ({ x: m.ts_unix * 1000, y: m.level_db }))
+      .sort((a, b) => a.x - b.x);
+
+    chart.data.datasets[0].data = pts;
+    chart.options.scales.x.min = since.getTime();
+    chart.options.scales.x.max = until.getTime();
+
+    if (pts.length > 0) {
+      const vals = pts.map(p => p.y);
+      const min = vals.reduce((a, b) => Math.min(a, b),  Infinity);
+      const max = vals.reduce((a, b) => Math.max(a, b), -Infinity);
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      chart.options.scales.y.min = Math.max(0,  Math.floor(min - 5));
+      chart.options.scales.y.max =              Math.ceil(max + 5);
+      setStats(min, max, avg, pts.length);
+    } else {
+      chart.options.scales.y.min = undefined;
+      chart.options.scales.y.max = undefined;
+      emptyMsg.style.display = 'flex';
+      setStats(null, null, null, 0);
+    }
+
+    chart.update('none');
+  } catch (e) {
+    console.error('loadData:', e);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  }
+}
+
+function getRange() {
+  const date  = document.getElementById('inp-date').value  || todayStr();
+  const time  = document.getElementById('inp-time').value  || '08:00';
+  const hours = parseInt(document.getElementById('inp-dur').value) || 24;
+  const since = new Date(`${date}T${time}:00`);
+  const until = new Date(since.getTime() + hours * 3600_000);
+  return { since, until };
+}
+
+// ── Stats bar ─────────────────────────────────────────────────────────────────
+
+function setStats(min, max, avg, count) {
+  const fmt = v => v != null ? v.toFixed(1) + ' dB' : '–';
+  document.getElementById('s-min').textContent = fmt(min);
+  document.getElementById('s-max').textContent = fmt(max);
+  document.getElementById('s-avg').textContent = fmt(avg);
+  document.getElementById('s-cnt').textContent =
+    count != null ? count.toLocaleString('de-DE') : '–';
+}
+
+// ── Live reading ──────────────────────────────────────────────────────────────
+
+async function pollLive() {
+  // Health / connection state
+  try {
+    const h = await (await fetch('/health')).json();
+    const dot = document.getElementById('dot');
+    const txt = document.getElementById('status-txt');
+    dot.className = 'dot ' + (h.connected ? 'ok' : 'err');
+    txt.textContent = h.connected ? 'Verbunden' : (h.error || 'Getrennt');
+  } catch (_) {
+    document.getElementById('dot').className = 'dot err';
+    document.getElementById('status-txt').textContent = 'Keine Verbindung zur API';
+  }
+
+  // Current measurement
+  try {
+    const resp = await fetch('/current');
+    if (resp.ok) {
+      const m = await resp.json();
+      const dbEl   = document.getElementById('live-db');
+      const metaEl = document.getElementById('live-meta');
+      dbEl.textContent = m.level_db.toFixed(1) + ' dB';
+      dbEl.className   = 'live-db' + (m.overflow ? ' over' : '');
+      const t = new Date(m.ts_unix * 1000).toLocaleTimeString('de-DE');
+      metaEl.textContent = `dB(${m.weighting}) · ${m.response} · ${t}`;
+    }
+  } catch (_) {}
+}
+
+function scheduleLive() {
+  pollLive();
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(scheduleLive, 30_000);
+}
+
+// ── Auto-refresh ──────────────────────────────────────────────────────────────
+
+function setupAutoRefresh() {
+  const cb = document.getElementById('inp-auto');
+
+  function arm() {
+    clearTimeout(autoTimer);
+    if (cb.checked) {
+      autoTimer = setTimeout(() => { loadData(); arm(); }, 60_000);
+    }
+  }
+
+  cb.addEventListener('change', arm);
+  arm();
+}
+</script>
+</body>
+</html>

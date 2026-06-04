@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 from datetime import datetime, timezone
@@ -5,9 +6,11 @@ from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 import db as database
+
+_WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 
 app = FastAPI(title="SoundMaster API", version="1.0")
 
@@ -38,6 +41,11 @@ def _measurement_to_dict(m) -> dict:
         "overflow": m.overflow,
         "underflow": m.underflow,
     }
+
+
+@app.get("/", include_in_schema=False)
+def web_app():
+    return FileResponse(os.path.join(_WEB_DIR, "index.html"))
 
 
 @app.get("/health")
