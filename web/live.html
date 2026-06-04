@@ -168,9 +168,10 @@
       </svg>
     </button>
     <div class="nav-menu" id="nav-menu">
-      <a href="/"     class="nav-item">📊 Verlauf</a>
-      <a href="/live" class="nav-item active">📡 Live</a>
-      <a href="/docs" class="nav-item" target="_blank">📖 API Docs</a>
+      <a href="/"        class="nav-item">📊 Verlauf</a>
+      <a href="/live"    class="nav-item active">📡 Live</a>
+      <a href="/settings" class="nav-item">⚙️ Einstellungen</a>
+      <a href="/docs"    class="nav-item" target="_blank">📖 API Docs</a>
     </div>
   </div>
   <h1>Live</h1>
@@ -231,6 +232,43 @@ const BUFFER = [];   // {x: ms, y: db}
 let lastTsUnix = 0;
 let chart = null;
 
+// ── Limits ────────────────────────────────────────────────────────────────────
+
+function loadLimits() {
+  return {
+    day:   parseFloat(localStorage.getItem('sm_limit_day')   ?? 60),
+    night: parseFloat(localStorage.getItem('sm_limit_night') ?? 45),
+  };
+}
+
+const limitPlugin = {
+  id: 'limitLines',
+  afterDraw(chart) {
+    const { ctx, chartArea, scales } = chart;
+    if (!chartArea) return;
+    const { day, night } = loadLimits();
+    [
+      [day,   '#ffc107', `Tag ${day} dB(A)`],
+      [night, '#4fc3f7', `Nacht ${night} dB(A)`],
+    ].forEach(([val, color, label]) => {
+      const y = scales.y.getPixelForValue(val);
+      if (y < chartArea.top || y > chartArea.bottom) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 4]);
+      ctx.moveTo(chartArea.left, y);
+      ctx.lineTo(chartArea.right, y);
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.font = '11px Segoe UI,system-ui,sans-serif';
+      ctx.fillText(label, chartArea.left + 6, y - 4);
+      ctx.restore();
+    });
+  }
+};
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -258,6 +296,7 @@ function initChart() {
         tension: 0.2,
       }]
     },
+    plugins: [limitPlugin],
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -319,8 +358,9 @@ function updateChart() {
       sum += p.y;
     }
     const avg = sum / BUFFER.length;
-    chart.options.scales.y.min = Math.max(0, Math.floor(min - 3));
-    chart.options.scales.y.max = Math.ceil(max + 3);
+    const { day: limDay, night: limNight } = loadLimits();
+    chart.options.scales.y.min = Math.max(0, Math.floor(Math.min(min, limNight) - 3));
+    chart.options.scales.y.max =            Math.ceil(Math.max(max, limDay) + 3);
     setStats(min, max, avg, BUFFER.length);
   }
 

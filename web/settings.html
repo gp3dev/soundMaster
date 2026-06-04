@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoundMaster · Einstellungen</title>
+  <link rel="stylesheet" href="/nav.css">
+  <script src="/nav.js" defer></script>
+  <style>
+    :root {
+      --bg:      #1a1a1a;
+      --surface: #242424;
+      --border:  #333;
+      --text:    #ddd;
+      --muted:   #777;
+      --green:   #4caf50;
+      --blue:    #0178d4;
+      --red:     #e53935;
+      --yellow:  #ffc107;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 480px;
+    }
+    .card h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .field label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    select, input[type=number] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: inherit;
+      width: 100%;
+    }
+    select:focus, input[type=number]:focus {
+      outline: 1px solid var(--blue);
+    }
+
+    .limit-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .limit-preview {
+      display: flex;
+      gap: 16px;
+      padding: 10px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .limit-preview span { color: var(--muted); font-size: 11px; }
+    .lp-day   { color: var(--yellow); font-weight: 600; }
+    .lp-night { color: #4fc3f7;       font-weight: 600; }
+
+    .btn {
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      transition: opacity .15s;
+      align-self: flex-start;
+    }
+    .btn:hover { opacity: .85; }
+
+    .saved-msg {
+      font-size: 12px;
+      color: var(--green);
+      opacity: 0;
+      transition: opacity .3s;
+      align-self: center;
+    }
+    .saved-msg.show { opacity: 1; }
+
+    .actions { display: flex; align-items: center; gap: 12px; }
+
+    .zone-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .zone-table th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 400;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      padding: 4px 8px 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .zone-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    .zone-table tr:last-child td { border-bottom: none; }
+    .td-day   { color: var(--yellow); }
+    .td-night { color: #4fc3f7; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="nav-wrap">
+    <button class="burger" onclick="navToggle()" aria-label="Menü">
+      <svg width="18" height="14" viewBox="0 0 18 14" fill="none">
+        <rect y="0"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="6"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="12" width="18" height="2" rx="1" fill="currentColor"/>
+      </svg>
+    </button>
+    <div class="nav-menu" id="nav-menu">
+      <a href="/"        class="nav-item">📊 Verlauf</a>
+      <a href="/live"    class="nav-item">📡 Live</a>
+      <a href="/settings" class="nav-item active">⚙️ Einstellungen</a>
+      <a href="/docs"    class="nav-item" target="_blank">📖 API Docs</a>
+    </div>
+  </div>
+  <h1>Einstellungen</h1>
+</header>
+
+<div class="card">
+  <h2>Grenzwerte</h2>
+
+  <div class="field">
+    <label for="inp-zone">Gebietstyp (Voreinstellung)</label>
+    <select id="inp-zone" onchange="applyZone()">
+      <option value="">– Benutzerdefiniert –</option>
+      <option value="rein">Reine Wohngebiete</option>
+      <option value="allgemein">Allgemeine Wohngebiete</option>
+      <option value="dorf">Dorf- und Mischgebiete</option>
+      <option value="gewerbe">Gewerbegebiete</option>
+      <option value="industrie">Industriegebiete</option>
+    </select>
+  </div>
+
+  <div class="limit-row">
+    <div class="field">
+      <label for="inp-day">Grenzwert Tag (06–22 Uhr) dB(A)</label>
+      <input type="number" id="inp-day" min="0" max="130" step="1" oninput="clearZone()">
+    </div>
+    <div class="field">
+      <label for="inp-night">Grenzwert Nacht (22–06 Uhr) dB(A)</label>
+      <input type="number" id="inp-night" min="0" max="130" step="1" oninput="clearZone()">
+    </div>
+  </div>
+
+  <div class="limit-preview" id="preview"></div>
+
+  <div class="actions">
+    <button class="btn" onclick="save()">Speichern</button>
+    <span class="saved-msg" id="saved-msg">Gespeichert ✓</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Referenz – Immissionsrichtwerte (TA Lärm)</h2>
+  <table class="zone-table">
+    <thead>
+      <tr>
+        <th>Gebietstyp</th>
+        <th class="td-day">Tag</th>
+        <th class="td-night">Nacht</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Reine Wohngebiete</td>      <td class="td-day">50 dB(A)</td><td class="td-night">35 dB(A)</td></tr>
+      <tr><td>Allgemeine Wohngebiete</td> <td class="td-day">55 dB(A)</td><td class="td-night">40 dB(A)</td></tr>
+      <tr><td>Dorf- und Mischgebiete</td> <td class="td-day">60 dB(A)</td><td class="td-night">45 dB(A)</td></tr>
+      <tr><td>Gewerbegebiete</td>         <td class="td-day">65 dB(A)</td><td class="td-night">50 dB(A)</td></tr>
+      <tr><td>Industriegebiete</td>       <td class="td-day">70 dB(A)</td><td class="td-night">70 dB(A)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+'use strict';
+
+const ZONES = {
+  rein:       { day: 50, night: 35 },
+  allgemein:  { day: 55, night: 40 },
+  dorf:       { day: 60, night: 45 },
+  gewerbe:    { day: 65, night: 50 },
+  industrie:  { day: 70, night: 70 },
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  const day   = parseFloat(localStorage.getItem('sm_limit_day')   ?? 60);
+  const night = parseFloat(localStorage.getItem('sm_limit_night') ?? 45);
+  document.getElementById('inp-day').value   = day;
+  document.getElementById('inp-night').value = night;
+
+  // Detect if values match a preset and pre-select it
+  const savedZone = localStorage.getItem('sm_zone') ?? '';
+  document.getElementById('inp-zone').value = savedZone;
+
+  updatePreview();
+});
+
+function applyZone() {
+  const key = document.getElementById('inp-zone').value;
+  if (!key || !ZONES[key]) return;
+  document.getElementById('inp-day').value   = ZONES[key].day;
+  document.getElementById('inp-night').value = ZONES[key].night;
+  updatePreview();
+}
+
+function clearZone() {
+  document.getElementById('inp-zone').value = '';
+  updatePreview();
+}
+
+function updatePreview() {
+  const day   = document.getElementById('inp-day').value   || '–';
+  const night = document.getElementById('inp-night').value || '–';
+  document.getElementById('preview').innerHTML =
+    `<div><span>Tag</span><br><span class="lp-day">${day} dB(A)</span></div>` +
+    `<div><span>Nacht</span><br><span class="lp-night">${night} dB(A)</span></div>`;
+}
+
+document.getElementById('inp-day').addEventListener('input', updatePreview);
+document.getElementById('inp-night').addEventListener('input', updatePreview);
+
+function save() {
+  const day   = parseFloat(document.getElementById('inp-day').value);
+  const night = parseFloat(document.getElementById('inp-night').value);
+  if (isNaN(day) || isNaN(night)) return;
+  localStorage.setItem('sm_limit_day',   day);
+  localStorage.setItem('sm_limit_night', night);
+  localStorage.setItem('sm_zone', document.getElementById('inp-zone').value);
+
+  const msg = document.getElementById('saved-msg');
+  msg.classList.add('show');
+  setTimeout(() => msg.classList.remove('show'), 2000);
+}
+</script>
+</body>
+</html>
