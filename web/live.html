@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoundMaster · Live</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="/nav.js" defer></script>
+  <style>
+    :root {
+      --bg:      #1a1a1a;
+      --surface: #242424;
+      --border:  #333;
+      --text:    #ddd;
+      --muted:   #777;
+      --green:   #4caf50;
+      --blue:    #0178d4;
+      --red:     #e53935;
+      --yellow:  #ffc107;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ── Nav ── */
+    .nav-wrap { position: relative; }
+    .burger {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 36px; height: 36px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0; flex-shrink: 0;
+    }
+    .burger:hover { background: var(--surface); }
+    .nav-menu {
+      display: none;
+      position: absolute;
+      top: 42px; left: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      min-width: 190px;
+      z-index: 200;
+      box-shadow: 0 8px 24px rgba(0,0,0,.6);
+      overflow: hidden;
+    }
+    .nav-menu.open { display: block; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 16px;
+      color: var(--text); text-decoration: none; font-size: 14px;
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    .nav-item:last-child { border-bottom: none; }
+    .nav-item:hover { background: rgba(255,255,255,.05); }
+    .nav-item.active { color: var(--blue); }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    h1 { font-size: 18px; font-weight: 600; letter-spacing: .5px; }
+    .status {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--muted);
+      margin-left: 4px;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background .3s;
+    }
+    .dot.ok  { background: var(--green); }
+    .dot.err { background: var(--red); }
+
+    /* ── Big display ── */
+    .display {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 20px;
+      text-align: center;
+    }
+    .display-db {
+      font-size: 72px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: var(--green);
+      line-height: 1;
+      letter-spacing: -2px;
+      transition: color .3s;
+    }
+    .display-db.warn { color: var(--yellow); }
+    .display-db.over { color: var(--red); }
+    .display-db.stale { color: var(--muted); }
+    .display-meta {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: .3px;
+    }
+    .display-time {
+      margin-top: 4px;
+      font-size: 16px;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Window control ── */
+    .window-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .window-bar label { font-size: 12px; color: var(--muted); }
+    select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    select:focus { outline: 1px solid var(--blue); }
+    .live-badge {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--muted);
+    }
+    .pulse {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    .pulse.paused { animation: none; background: var(--muted); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: .4; transform: scale(.7); }
+    }
+
+    /* ── Chart ── */
+    .chart-wrap {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      flex: 1;
+      min-height: 240px;
+    }
+
+    /* ── Stats ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    @media (max-width: 600px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+    }
+    .stat-lbl {
+      font-size: 10px; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--muted);
+    }
+    .stat-val {
+      font-size: 22px; font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      margin-top: 3px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="nav-wrap">
+    <button class="burger" onclick="navToggle()" aria-label="Menü">
+      <svg width="18" height="14" viewBox="0 0 18 14" fill="none">
+        <rect y="0"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="6"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="12" width="18" height="2" rx="1" fill="currentColor"/>
+      </svg>
+    </button>
+    <div class="nav-menu" id="nav-menu">
+      <a href="/"     class="nav-item">📊 Verlauf</a>
+      <a href="/live" class="nav-item active">📡 Live</a>
+      <a href="/docs" class="nav-item" target="_blank">📖 API Docs</a>
+    </div>
+  </div>
+  <h1>Live</h1>
+  <div class="status">
+    <div class="dot" id="dot"></div>
+    <span id="status-txt">–</span>
+  </div>
+</header>
+
+<div class="display">
+  <div class="display-db stale" id="disp-db">–</div>
+  <div class="display-meta" id="disp-meta">–</div>
+  <div class="display-time" id="disp-time">–</div>
+</div>
+
+<div class="window-bar">
+  <label for="inp-win">Fenster</label>
+  <select id="inp-win" onchange="onWindowChange()">
+    <option value="1">1 Minute</option>
+    <option value="5">5 Minuten</option>
+    <option value="10" selected>10 Minuten</option>
+    <option value="30">30 Minuten</option>
+    <option value="60">60 Minuten</option>
+  </select>
+  <div class="live-badge">
+    <div class="pulse" id="pulse"></div>
+    <span id="live-txt">Live</span>
+  </div>
+</div>
+
+<div class="chart-wrap">
+  <canvas id="chart"></canvas>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-lbl">Minimum</div>
+    <div class="stat-val" id="s-min" style="color:var(--green)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Maximum</div>
+    <div class="stat-val" id="s-max" style="color:var(--red)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Mittelwert</div>
+    <div class="stat-val" id="s-avg" style="color:var(--blue)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Im Fenster</div>
+    <div class="stat-val" id="s-cnt" style="color:var(--muted)">–</div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const BUFFER = [];   // {x: ms, y: db}
+let windowMin = 10;
+let lastTsUnix = 0;
+let chart = null;
+let staleTimer = null;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  initChart();
+  loadInitial().then(() => {
+    pollCurrent();
+    pollHealth();
+  });
+});
+
+// ── Chart ─────────────────────────────────────────────────────────────────────
+
+function initChart() {
+  const ctx = document.getElementById('chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [{
+        data: [],
+        borderColor: '#4caf50',
+        backgroundColor: 'rgba(76,175,80,0.07)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#111',
+          borderColor: '#333',
+          borderWidth: 1,
+          padding: 8,
+          callbacks: {
+            title(items) {
+              return new Date(items[0].parsed.x).toLocaleTimeString('de-DE', {
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+              });
+            },
+            label(item) { return `  ${item.parsed.y.toFixed(1)} dB`; }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: {
+            displayFormats: { second: 'HH:mm:ss', minute: 'HH:mm', hour: 'HH:mm' }
+          },
+          grid:  { color: '#2a2a2a' },
+          ticks: { color: '#555', maxTicksLimit: 8 }
+        },
+        y: {
+          grid:  { color: '#2a2a2a' },
+          ticks: { color: '#555', callback: v => v + ' dB' }
+        }
+      }
+    }
+  });
+}
+
+function updateChart() {
+  const now    = Date.now();
+  const cutoff = now - windowMin * 60_000;
+
+  // Trim buffer to current window
+  while (BUFFER.length && BUFFER[0].x < cutoff) BUFFER.shift();
+
+  chart.data.datasets[0].data = BUFFER;
+  chart.options.scales.x.min = cutoff;
+  chart.options.scales.x.max = now;
+
+  if (BUFFER.length > 0) {
+    const vals = BUFFER.map(p => p.y);
+    const min  = vals.reduce((a, b) => Math.min(a, b),  Infinity);
+    const max  = vals.reduce((a, b) => Math.max(a, b), -Infinity);
+    const avg  = vals.reduce((a, b) => a + b, 0) / vals.length;
+    chart.options.scales.y.min = Math.max(0, Math.floor(min - 3));
+    chart.options.scales.y.max = Math.ceil(max + 3);
+    setStats(min, max, avg, BUFFER.length);
+  }
+
+  chart.update('none');
+}
+
+// ── Load initial history ──────────────────────────────────────────────────────
+
+async function loadInitial() {
+  try {
+    const resp = await fetch(`/history?minutes=${windowMin}&limit=1000`);
+    if (!resp.ok) return;
+    const json = await resp.json();
+    json.data
+      .sort((a, b) => a.ts_unix - b.ts_unix)
+      .forEach(m => {
+        BUFFER.push({ x: m.ts_unix * 1000, y: m.level_db });
+        if (m.ts_unix > lastTsUnix) lastTsUnix = m.ts_unix;
+      });
+    updateChart();
+  } catch (_) {}
+}
+
+// ── Live polling ──────────────────────────────────────────────────────────────
+
+async function pollCurrent() {
+  try {
+    const resp = await fetch('/current');
+    if (resp.ok) {
+      const m = await resp.json();
+      if (m.ts_unix > lastTsUnix) {
+        lastTsUnix = m.ts_unix;
+        BUFFER.push({ x: m.ts_unix * 1000, y: m.level_db });
+        updateChart();
+        updateDisplay(m);
+        markLive(true);
+      }
+    }
+  } catch (_) { markLive(false); }
+
+  setTimeout(pollCurrent, 2_000);
+}
+
+async function pollHealth() {
+  try {
+    const h = await (await fetch('/health')).json();
+    const dot = document.getElementById('dot');
+    const txt = document.getElementById('status-txt');
+    dot.className = 'dot ' + (h.connected ? 'ok' : 'err');
+    txt.textContent = h.connected ? 'Verbunden' : (h.error || 'Getrennt');
+  } catch (_) {
+    document.getElementById('dot').className = 'dot err';
+    document.getElementById('status-txt').textContent = 'Keine API';
+  }
+  setTimeout(pollHealth, 10_000);
+}
+
+// ── Display ───────────────────────────────────────────────────────────────────
+
+function updateDisplay(m) {
+  const el = document.getElementById('disp-db');
+  el.textContent = m.level_db.toFixed(1) + ' dB';
+  el.className   = 'display-db' + (m.overflow ? ' over' : m.level_db >= 80 ? ' warn' : '');
+
+  document.getElementById('disp-meta').textContent =
+    `dB(${m.weighting}) · ${m.response}`;
+  document.getElementById('disp-time').textContent =
+    new Date(m.ts_unix * 1000).toLocaleTimeString('de-DE');
+
+  // Mark stale after 5s without update
+  clearTimeout(staleTimer);
+  staleTimer = setTimeout(() => {
+    document.getElementById('disp-db').classList.add('stale');
+  }, 5_000);
+}
+
+function markLive(active) {
+  document.getElementById('pulse').className = 'pulse' + (active ? '' : ' paused');
+  document.getElementById('live-txt').textContent = active ? 'Live' : 'Kein Signal';
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+function setStats(min, max, avg, count) {
+  const fmt = v => v != null ? v.toFixed(1) + ' dB' : '–';
+  document.getElementById('s-min').textContent = fmt(min);
+  document.getElementById('s-max').textContent = fmt(max);
+  document.getElementById('s-avg').textContent = fmt(avg);
+  document.getElementById('s-cnt').textContent = count != null ? count.toLocaleString('de-DE') : '–';
+}
+
+// ── Window change ─────────────────────────────────────────────────────────────
+
+async function onWindowChange() {
+  windowMin = parseInt(document.getElementById('inp-win').value);
+  // Reload history for larger window (buffer may not have old data)
+  BUFFER.length = 0;
+  lastTsUnix = 0;
+  await loadInitial();
+}
+</script>
+</body>
+</html>
