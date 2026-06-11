@@ -43,6 +43,8 @@ _PACKET_SIZE = 18
 # Constant bytes at positions 6-13 used as sync anchor
 _SYNC_ANCHOR = bytes([0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00])
 _SYNC_OFFSET = 6  # anchor starts at byte 6 within the 18-byte packet
+# Reopen port if no bytes received for this long (catches silent USB driver stalls)
+_WATCHDOG_SECONDS = 15
 
 
 def probe(port: str) -> None:
@@ -119,12 +121,22 @@ class SerialReader:
                     self._last_error = ""
                     s.reset_input_buffer()
                     buf = bytearray()
+                    last_rx = time.monotonic()
 
                     while not self._stop.is_set():
                         chunk = s.read(32)
+                        now = time.monotonic()
                         if chunk:
+                            last_rx = now
                             buf.extend(chunk)
                             self._drain_packets(buf)
+                        elif now - last_rx > _WATCHDOG_SECONDS:
+                            # No bytes for too long — silent USB driver stall; reopen port
+                            self._connected = False
+                            self._last_error = (
+                                f"Keine Daten seit {_WATCHDOG_SECONDS}s — Port wird neu geöffnet"
+                            )
+                            break
 
             except serial.SerialException as e:
                 self._connected = False
