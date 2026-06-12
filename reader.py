@@ -33,8 +33,64 @@ import threading
 import time
 
 import serial
+from serial.tools.list_ports import comports
 
 from db import Measurement
+
+_CP210X_VID = 0x10C4
+_CP210X_PID = 0xEA60
+
+
+def list_serial_ports():
+    """Return all available serial ports sorted by device name."""
+    return sorted(comports(), key=lambda p: p.device)
+
+
+def resolve_port(configured_port: str) -> str:
+    """Return the serial port to use, prompting for selection if needed.
+
+    - Configured port exists and has a CP210x adapter → use it silently.
+    - Exactly one CP210x found elsewhere → auto-select and print a notice.
+    - Otherwise → print a numbered menu and wait for user input.
+    """
+    ports = list_serial_ports()
+    devices = {p.device: p for p in ports}
+
+    if configured_port in devices and devices[configured_port].vid == _CP210X_VID:
+        return configured_port
+
+    cp210x_ports = [p for p in ports if p.vid == _CP210X_VID]
+
+    if len(cp210x_ports) == 1:
+        found = cp210x_ports[0]
+        print(f"CP2102N-Adapter gefunden: {found.device} ({found.description}) — wird verwendet.")
+        return found.device
+
+    if configured_port not in devices:
+        print(f"Kein CP2102N-Adapter am konfigurierten Port {configured_port} gefunden.")
+    else:
+        print(f"Am konfigurierten Port {configured_port} kein CP2102N-Adapter erkannt.")
+
+    if not ports:
+        print(f"Warnung: Keine seriellen Ports gefunden. Verwende {configured_port}.")
+        return configured_port
+
+    print("\nVerfügbare serielle Ports:")
+    for i, p in enumerate(ports, start=1):
+        vid_pid = f"[{p.vid:04X}:{p.pid:04X}]" if p.vid is not None else ""
+        desc = p.description or "(keine Beschreibung)"
+        print(f"  [{i}] {p.device:<16} {desc:<40} {vid_pid}")
+
+    default = 1
+    while True:
+        try:
+            raw = input(f"\nPort auswählen [{default}]: ").strip()
+            idx = int(raw) if raw else default
+            if 1 <= idx <= len(ports):
+                return ports[idx - 1].device
+        except (ValueError, KeyboardInterrupt):
+            pass
+        print(f"Bitte eine Zahl zwischen 1 und {len(ports)} eingeben.")
 
 PROBE_BAUDS = [2400, 4800, 9600, 19200, 38400]
 PROBE_SECONDS = 4

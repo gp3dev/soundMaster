@@ -19,7 +19,7 @@ import time
 
 import config
 import db as database
-from reader import SerialReader, probe
+from reader import SerialReader, probe, resolve_port
 from api import ApiServer, set_connection_state
 
 
@@ -63,6 +63,9 @@ if __name__ == "__main__":
     if cfg.probe:
         probe(cfg.serial.port)
         sys.exit(0)
+
+    # ── Port-Erkennung ─────────────────────────────────────────────────────
+    cfg.serial.port = resolve_port(cfg.serial.port)
 
     # ── Normal mode ────────────────────────────────────────────────────────
     database.init(cfg.db_path)
