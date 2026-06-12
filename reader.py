@@ -56,7 +56,8 @@ def probe(port: str) -> None:
         print(f"{'─'*60}")
         buf = bytearray()
         try:
-            with serial.Serial(port, baud, timeout=0.2) as s:
+            with serial.Serial(port, baud, timeout=0.2,
+                               dsrdtr=False, rtscts=False) as s:
                 s.reset_input_buffer()
                 deadline = time.monotonic() + PROBE_SECONDS
                 while time.monotonic() < deadline:
@@ -64,7 +65,7 @@ def probe(port: str) -> None:
                     if chunk:
                         buf.extend(chunk)
                         _hex_dump(chunk)
-        except serial.SerialException as e:
+        except (serial.SerialException, OSError) as e:
             print(f"  Error: {e}")
         if buf:
             print(f"\n  Total bytes in {PROBE_SECONDS}s: {len(buf)}")
@@ -116,7 +117,8 @@ class SerialReader:
         while not self._stop.is_set():
             try:
                 with serial.Serial(self._port, self._baud,
-                                   timeout=self._timeout) as s:
+                                   timeout=self._timeout,
+                                   dsrdtr=False, rtscts=False) as s:
                     self._connected = True
                     self._last_error = ""
                     s.reset_input_buffer()
@@ -138,7 +140,7 @@ class SerialReader:
                             )
                             break
 
-            except serial.SerialException as e:
+            except (serial.SerialException, OSError) as e:
                 self._connected = False
                 self._last_error = str(e)
                 if not self._stop.is_set():
