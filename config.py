@@ -29,6 +29,7 @@ class AppConfig:
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     api: ApiConfig = field(default_factory=ApiConfig)
     probe: bool = False
+    diag: bool = False
     no_tui: bool = False
 
     @property
@@ -45,6 +46,7 @@ def load(argv=None) -> AppConfig:
     parser.add_argument("--api-port", type=int, help="REST API port")
     parser.add_argument("--api-host", help="REST API bind address")
     parser.add_argument("--probe", action="store_true", help="Probe serial port and dump raw bytes")
+    parser.add_argument("--diag", action="store_true", help="Diagnosemodus: Rohdaten + DB-Schreiben ohne TUI")
     parser.add_argument("--no-tui", action="store_true", help="Run without TUI (API + logging only)")
     args = parser.parse_args(argv)
 
@@ -78,6 +80,7 @@ def load(argv=None) -> AppConfig:
         cfg.api.host = args.api_host
 
     cfg.probe = args.probe
+    cfg.diag = args.diag
     cfg.no_tui = args.no_tui
 
     return cfg

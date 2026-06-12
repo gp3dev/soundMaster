@@ -67,6 +67,12 @@ if __name__ == "__main__":
     # ── Port-Erkennung ─────────────────────────────────────────────────────
     cfg.serial.port = resolve_port(cfg.serial.port)
 
+    # ── Diag mode ──────────────────────────────────────────────────────────
+    if cfg.diag:
+        from diag import run_diag
+        run_diag(cfg.serial.port, cfg.db_path)
+        sys.exit(0)
+
     # ── Normal mode ────────────────────────────────────────────────────────
     database.init(cfg.db_path)
 
@@ -75,27 +81,6 @@ if __name__ == "__main__":
     tui_queue: queue.Queue = queue.Queue(maxsize=500)
     db_queue: queue.Queue = queue.Queue(maxsize=500)
 
-    def _fanout_queue() -> None:
-        """Bridge: pull from reader_queue, push to both tui and db queues."""
-        pass  # handled via MultiQueue below
-
-    class MultiQueue:
-        """Write to multiple queues from the serial reader callback."""
-        def __init__(self, *queues):
-            self._queues = queues
-
-        def put(self, item):
-            for q in self._queues:
-                try:
-                    q.put_nowait(item)
-                except queue.Full:
-                    pass  # drop oldest or skip — don't block the reader
-
-    multi_q = MultiQueue(tui_queue, db_queue)
-
-    # Wire reader to multi_q by wrapping the queue interface
-    # SerialReader expects a queue.Queue; we patch put_nowait
-    import types
     proxy_queue = queue.Queue(maxsize=500)
 
     stop_event = threading.Event()

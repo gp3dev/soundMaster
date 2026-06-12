@@ -8,14 +8,15 @@ Protocol identified via --probe + live capture (2026-06-04):
   Byte  0:    0xa0 / 0xa1  packet marker (low nibble = unknown status bit)
   Byte  1:    bit 3 (0x08) = A-weighting (set) / C-weighting (clear)
               bit 2 (0x04) = SLOW (set) / FAST (clear)
-              known values: 0x48=A+FAST, 0x4c=A+SLOW, 0x40=C+FAST, 0x44=C+SLOW
+              bit 6 (0x40) = unknown mode flag (set in some sessions, clear in others)
+              observed: 0x48=A+FAST, 0x4c=A+SLOW, 0x40=C+FAST, 0x44=C+SLOW,
+                        0x08=A+FAST(mode2), 0x0c=A+SLOW(mode2)
   Byte  2:    0x00  constant
   Byte  3:    low nibble = TENS digit of dB (0-9)
   Byte  4:    low nibble = ONES digit of dB (0-9)
   Byte  5:    low nibble = TENTHS digit of dB (0-9)
-  Byte  6-9:  00 00 00 01  constant
-  Byte 10-11: 00 01  constant
-  Byte 12-13: 00 00  constant
+  Byte  6-11: 00 00 00 01 00 01  invariant sync anchor
+  Byte 12-13: variable status bytes (0x00 0x00 or 0x00 0x01 observed)
   Byte 14:    BCD HH (device clock hours)
   Byte 15:    BCD MM (device clock minutes)
   Byte 16:    tens digit of seconds (low nibble)
@@ -96,8 +97,10 @@ PROBE_BAUDS = [2400, 4800, 9600, 19200, 38400]
 PROBE_SECONDS = 4
 
 _PACKET_SIZE = 18
-# Constant bytes at positions 6-13 used as sync anchor
-_SYNC_ANCHOR = bytes([0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00])
+# Bytes 6-11 are constant across all observed device modes; bytes 12-13 vary
+# with device state (0x00/0x01 observed at byte 13 depending on mode).
+# Using only the 6 invariant bytes avoids false-sync misses on mode changes.
+_SYNC_ANCHOR = bytes([0x00, 0x00, 0x00, 0x01, 0x00, 0x01])
 _SYNC_OFFSET = 6  # anchor starts at byte 6 within the 18-byte packet
 # Reopen port if no bytes received for this long (catches silent USB driver stalls)
 _WATCHDOG_SECONDS = 15
@@ -154,6 +157,7 @@ class SerialReader:
         self._thread = threading.Thread(target=self._run, daemon=True, name="serial-reader")
         self._connected = False
         self._last_error: str = ""
+        self._last_emitted: float = 0.0  # monotonic time of last packet forwarded
 
     @property
     def connected(self) -> bool:
@@ -203,13 +207,14 @@ class SerialReader:
                     time.sleep(2)
 
     def _drain_packets(self, buf: bytearray) -> None:
-        """Extract complete 18-byte packets using the 8-byte sync anchor at offset 6."""
+        """Extract complete 18-byte packets using the 6-byte sync anchor at offset 6."""
         while True:
-            # Find the constant 8-byte anchor that sits at offset 6 in every packet
-            idx = bytes(buf).find(_SYNC_ANCHOR)
+            idx = buf.find(_SYNC_ANCHOR)
             if idx == -1:
-                # Keep last (anchor_len - 1) bytes — partial anchor may be in transit
-                keep = len(_SYNC_ANCHOR) - 1
+                # Keep enough bytes so a split packet can be reconstructed:
+                # _SYNC_OFFSET header bytes before the anchor + (anchor_len-1) for a
+                # partial anchor that spans two reads.
+                keep = _SYNC_OFFSET + len(_SYNC_ANCHOR) - 1
                 if len(buf) > keep:
                     del buf[:len(buf) - keep]
                 return
@@ -230,7 +235,10 @@ class SerialReader:
             pkt = bytes(buf[pkt_start:pkt_start + _PACKET_SIZE])
             m = _decode_packet(pkt)
             if m is not None:
-                self._q.put(m)
+                now = time.monotonic()
+                if now - self._last_emitted >= 0.8:
+                    self._q.put(m)
+                    self._last_emitted = now
             del buf[:pkt_start + _PACKET_SIZE]
 
 
@@ -243,8 +251,8 @@ def _decode_packet(pkt: bytes) -> Measurement | None:
     if pkt[0] not in (0xa0, 0xa1):
         return None
 
-    # Constant anchor at bytes 6-13
-    if bytes(pkt[6:14]) != _SYNC_ANCHOR:
+    # Invariant anchor at bytes 6-11 (bytes 12-13 vary by device mode)
+    if pkt[6:12] != _SYNC_ANCHOR:
         return None
 
     # dB value: low nibbles of bytes 3, 4, 5 = tens, ones, tenths
