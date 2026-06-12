@@ -11,7 +11,7 @@ Langzeit-Datenerfassung für den **Laserliner SoundTest-Master (082.070A)** Scha
 - **SQLite-Datenbank** für persistente Langzeitaufzeichnung
 - **REST-API** (FastAPI + uvicorn) mit aktuellen Werten, Verlauf und Statistiken
 - **TUI** (Textual) mit Live-Graph und Statusanzeige
-- **Web-Dashboard** (`http://localhost:8080`) mit Echtzeit-Diagramm
+- **Web-Dashboard** (`http://localhost:8080`) mit Echtzeit-Diagramm, LAeq-Verlaufschart (min/max-Band) und Light/Dark-Mode-Umschalter
 
 ## Voraussetzungen
 
@@ -57,8 +57,11 @@ Nach aktiviertem venv (oder nach `./start.sh` für den Einmalstart):
 # Ohne TUI (nur API + Logging, z. B. als Hintergrunddienst)
 .venv/bin/python main.py --no-tui
 
-# Protokoll-Diagnose: Rohbytes ausgeben
+# Protokoll-Diagnose: Rohbytes ausgeben (kein DB-Schreiben, kein API)
 .venv/bin/python main.py --probe
+
+# Diagnosemodus: Rohdaten dekodieren + in DB schreiben, ohne TUI/API
+.venv/bin/python main.py --diag
 
 # Weitere Optionen
 .venv/bin/python main.py --baud 2400 --api-port 8080
@@ -87,7 +90,8 @@ port = 8080
 | Endpunkt | Beschreibung |
 |----------|-------------|
 | `GET /current` | Aktuellste Messung |
-| `GET /history?minutes=60` | Verlauf (auch `since=`, `until=`, `limit=`) |
+| `GET /history?minutes=60` | Roher Verlauf (auch `since=`, `until=`, `limit=`) |
+| `GET /history/aggregate?minutes=60&buckets=200` | Aggregierter Verlauf: LAeq, min, max pro Zeitbucket |
 | `GET /stats?minutes=60` | Min/Max/Avg für Zeitfenster |
 | `GET /health` | Verbindungsstatus des Sensors |
 | `GET /` | Web-Dashboard |
@@ -117,15 +121,16 @@ Pakete sind 18 Byte lang, werden mit ~1 Hz gesendet.
 | Byte | Inhalt |
 |------|--------|
 | 0 | `0xa0` / `0xa1` Marker (unteres Nibble: unbekanntes Statusbit) |
-| 1 | Bit 3 (`0x08`): A(1)/C(0)-Gewichtung; Bit 2 (`0x04`): SLOW(1)/FAST(0); oberes Nibble `0x4x` beobachtet, Bedeutung unbekannt |
+| 1 | Bit 3 (`0x08`): A(1)/C(0)-Gewichtung; Bit 2 (`0x04`): SLOW(1)/FAST(0); Bit 6 (`0x40`): unbekanntes Modusflag |
 | 2 | `0x00` Konstante |
 | 3–5 | dB-Wert: unteres Nibble = Zehner, Einer, Zehntel |
-| 6–13 | Sync-Anker `00 00 00 01 00 01 00 00` |
+| 6–11 | Invarianter Sync-Anker `00 00 00 01 00 01` |
+| 12–13 | Variable Statusbytes (`0x00 0x00` oder `0x00 0x01` beobachtet) |
 | 14–17 | Geräte-Uhr BCD: HH MM SS_Zehner SS_Einer |
 
-Bekannte Byte-1-Werte: `0x48` = A+FAST, `0x4c` = A+SLOW, `0x40` = C+FAST, `0x44` = C+SLOW.
+Bekannte Byte-1-Werte: `0x48` = A+FAST, `0x4c` = A+SLOW, `0x40` = C+FAST, `0x44` = C+SLOW, `0x08` = A+FAST (Modus 2), `0x0c` = A+SLOW (Modus 2).
 
-Sync-Strategie: Suche den 8-Byte-Anker ab Offset 6, gehe 6 Bytes zurück für den Paketanfang.
+Sync-Strategie: Suche den 6-Byte-Anker ab Offset 6, gehe 6 Bytes zurück für den Paketanfang. Bytes 12–13 werden nicht für die Sync-Erkennung verwendet, da sie gerätezustandsabhängig variieren.
 
 > **Hinweis:** Range, Overflow und Underflow sind im Protokoll noch nicht dekodiert — `range_min/max` werden als 20/130 dB angenommen, `overflow`/`underflow` sind stets `false`.
 
@@ -138,11 +143,13 @@ api.py               FastAPI REST-API & statische Web-Dateien
 db.py                SQLite-Datenbank (Lesen/Schreiben/Statistiken)
 config.py            Konfigurationsladung (TOML + CLI-Argumente)
 tui.py               Textual-TUI mit Live-Graph
+diag.py              Diagnosemodus (--diag): Rohdaten + DB ohne TUI/API
 web/
-  index.html         Web-Dashboard (Verlaufsdiagramm)
+  index.html         Web-Dashboard (LAeq-Verlaufsdiagramm)
   live.html          Echtzeit-Ansicht
   settings.html      Einstellungsseite (TA-Lärm-Grenzwerte)
-  nav.css / nav.js   Navigation
+  nav.css / nav.js   Navigation & Theme-Umschalter
+  theme-init.js      Theme-Vorladung (verhindert Flash beim Laden)
 config.toml          Standardkonfiguration
 requirements.txt     Python-Abhängigkeiten
 start.sh             Bootstrap-Skript (venv + pip + start)
