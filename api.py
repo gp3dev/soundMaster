@@ -110,6 +110,36 @@ def stats(minutes: int = Query(60, ge=1, le=10080, description="Statistics windo
     }
 
 
+@app.get("/history/aggregate")
+def history_aggregate(
+    since: Optional[str] = Query(None, description="ISO 8601 start time"),
+    until: Optional[str] = Query(None, description="ISO 8601 end time"),
+    minutes: Optional[int] = Query(None, description="Last N minutes (alternative to since/until)"),
+    buckets: int = Query(200, ge=10, le=2000, description="Number of time buckets"),
+):
+    now = time.time()
+
+    if minutes is not None:
+        ts_since = now - minutes * 60
+        ts_until = now
+    else:
+        try:
+            ts_since = datetime.fromisoformat(since).timestamp() if since else now - 3600
+            ts_until = datetime.fromisoformat(until).timestamp() if until else now
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid timestamp: {e}")
+
+    bucket_seconds = max(1.0, (ts_until - ts_since) / buckets)
+    rows = database.query_aggregate(ts_since, ts_until, bucket_seconds)
+    return {
+        "count": len(rows),
+        "since": _ts_to_iso(ts_since),
+        "until": _ts_to_iso(ts_until),
+        "bucket_seconds": round(bucket_seconds, 1),
+        "data": [{"ts": _ts_to_iso(r["ts_unix"]), **r} for r in rows],
+    }
+
+
 app.mount("/", StaticFiles(directory=_WEB_DIR, html=True), name="web")
 
 

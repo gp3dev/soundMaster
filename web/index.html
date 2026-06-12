@@ -248,7 +248,7 @@
     <div class="stat-val" id="s-max" style="color:var(--red)">–</div>
   </div>
   <div class="stat">
-    <div class="stat-lbl">Mittelwert</div>
+    <div class="stat-lbl">LAeq</div>
     <div class="stat-val" id="s-avg" style="color:var(--blue)">–</div>
   </div>
   <div class="stat">
@@ -322,15 +322,22 @@ function initChart() {
   chart = new Chart(ctx, {
     type: 'line',
     data: {
-      datasets: [{
-        data: [],
-        borderColor: '#4caf50',
-        backgroundColor: 'rgba(76,175,80,0.07)',
-        borderWidth: 1.5,
-        pointRadius: 0,
-        fill: true,
-        tension: 0.2,
-      }]
+      datasets: [
+        // Dataset 0: min — lower bound of the min/max band (no visible border)
+        {
+          data: [], borderWidth: 0, pointRadius: 0, fill: false,
+        },
+        // Dataset 1: max — fills down to dataset 0 = the band
+        {
+          data: [], borderWidth: 0, pointRadius: 0,
+          fill: '-1', backgroundColor: 'rgba(76,175,80,0.12)',
+        },
+        // Dataset 2: LAeq line
+        {
+          data: [], borderColor: '#4caf50', backgroundColor: 'transparent',
+          borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.2,
+        },
+      ]
     },
     plugins: [limitPlugin],
     options: {
@@ -345,6 +352,7 @@ function initChart() {
           borderColor: '#333',
           borderWidth: 1,
           padding: 8,
+          filter(item) { return item.datasetIndex === 2; },
           callbacks: {
             title(items) {
               const d = new Date(items[0].parsed.x);
@@ -354,7 +362,14 @@ function initChart() {
               });
             },
             label(item) {
-              return `  ${item.parsed.y.toFixed(1)} dB`;
+              const i   = item.dataIndex;
+              const leq = item.parsed.y.toFixed(1);
+              const min = chart.data.datasets[0].data[i]?.y?.toFixed(1) ?? '–';
+              const max = chart.data.datasets[1].data[i]?.y?.toFixed(1) ?? '–';
+              return [
+                `  LAeq: ${leq} dB`,
+                `  Max: ${max} dB   Min: ${min} dB`,
+              ];
             }
           }
         }
@@ -364,10 +379,10 @@ function initChart() {
           type: 'time',
           time: {
             displayFormats: {
-              second:      'HH:mm:ss',
-              minute:      'HH:mm',
-              hour:        'HH:mm',
-              day:         'dd.MM.',
+              second: 'HH:mm:ss',
+              minute: 'HH:mm',
+              hour:   'HH:mm',
+              day:    'dd.MM.',
             }
           },
           grid:  { color: '#2a2a2a' },
@@ -395,31 +410,32 @@ async function loadData() {
 
   try {
     const { since, until } = getRange();
-    const url = `/history?since=${since.toISOString()}&until=${until.toISOString()}&limit=10000`;
+    const url = `/history/aggregate?since=${since.toISOString()}&until=${until.toISOString()}&buckets=200`;
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = await resp.json();
 
-    const pts = json.data
-      .map(m => ({ x: m.ts_unix * 1000, y: m.level_db }))
-      .sort((a, b) => a.x - b.x);
+    const rows = json.data;
+    const minPts = rows.map(r => ({ x: r.ts_unix * 1000, y: r.min_db }));
+    const maxPts = rows.map(r => ({ x: r.ts_unix * 1000, y: r.max_db }));
+    const leqPts = rows.map(r => ({ x: r.ts_unix * 1000, y: r.leq_db }));
 
-    chart.data.datasets[0].data = pts;
+    chart.data.datasets[0].data = minPts;
+    chart.data.datasets[1].data = maxPts;
+    chart.data.datasets[2].data = leqPts;
     chart.options.scales.x.min = since.getTime();
     chart.options.scales.x.max = until.getTime();
 
-    if (pts.length > 0) {
-      let min = Infinity, max = -Infinity, sum = 0;
-      for (const p of pts) {
-        if (p.y < min) min = p.y;
-        if (p.y > max) max = p.y;
-        sum += p.y;
-      }
-      const avg = sum / pts.length;
+    if (rows.length > 0) {
+      const globalMin = Math.min(...rows.map(r => r.min_db));
+      const globalMax = Math.max(...rows.map(r => r.max_db));
+      // Energy-average of bucket LAeqs = overall LAeq for the window
+      const leqTotal = 10 * Math.log10(rows.reduce((s, r) => s + 10 ** (r.leq_db / 10), 0) / rows.length);
+      const totalCount = rows.reduce((s, r) => s + r.count, 0);
       const { day: limDay, night: limNight } = loadLimits();
-      chart.options.scales.y.min = Math.max(0, Math.floor(Math.min(min, limNight) - 5));
-      chart.options.scales.y.max =             Math.ceil(Math.max(max, limDay) + 5);
-      setStats(min, max, avg, pts.length);
+      chart.options.scales.y.min = Math.max(0, Math.floor(Math.min(globalMin, limNight) - 5));
+      chart.options.scales.y.max =             Math.ceil(Math.max(globalMax, limDay) + 5);
+      setStats(globalMin, globalMax, leqTotal, totalCount);
     } else {
       chart.options.scales.y.min = undefined;
       chart.options.scales.y.max = undefined;
