@@ -4,20 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SoundMaster · Einstellungen</title>
+  <script src="/theme-init.js"></script>
   <link rel="stylesheet" href="/nav.css">
   <script src="/nav.js" defer></script>
   <style>
-    :root {
-      --bg:      #1a1a1a;
-      --surface: #242424;
-      --border:  #333;
-      --text:    #ddd;
-      --muted:   #777;
-      --green:   #4caf50;
-      --blue:    #0178d4;
-      --red:     #e53935;
-      --yellow:  #ffc107;
-    }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: var(--bg);
@@ -139,7 +129,7 @@
     }
     .zone-table td {
       padding: 6px 8px;
-      border-bottom: 1px solid #2a2a2a;
+      border-bottom: 1px solid var(--border);
     }
     .zone-table tr:last-child td { border-bottom: none; }
     .td-day   { color: var(--yellow); }
@@ -165,6 +155,7 @@
     </div>
   </div>
   <h1>Einstellungen</h1>
+  <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
 </header>
 
 <div class="card">

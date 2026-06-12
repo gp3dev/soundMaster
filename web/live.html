@@ -4,22 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SoundMaster · Live</title>
+  <script src="/theme-init.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   <link rel="stylesheet" href="/nav.css">
   <script src="/nav.js" defer></script>
   <style>
-    :root {
-      --bg:      #1a1a1a;
-      --surface: #242424;
-      --border:  #333;
-      --text:    #ddd;
-      --muted:   #777;
-      --green:   #4caf50;
-      --blue:    #0178d4;
-      --red:     #e53935;
-      --yellow:  #ffc107;
-    }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: var(--bg);
@@ -175,6 +165,7 @@
     </div>
   </div>
   <h1>Live</h1>
+  <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
   <div class="status">
     <div class="dot" id="dot"></div>
     <span id="status-txt">–</span>
@@ -231,6 +222,11 @@
 const BUFFER = [];   // {x: ms, y: db}
 let lastTsUnix = 0;
 let chart = null;
+
+const cssVar = name =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+window.addEventListener('themechange', () => { if (chart) chart.update('none'); });
 
 // ── Limits ────────────────────────────────────────────────────────────────────
 
@@ -325,12 +321,12 @@ function initChart() {
           time: {
             displayFormats: { second: 'HH:mm:ss', minute: 'HH:mm', hour: 'HH:mm' }
           },
-          grid:  { color: '#2a2a2a' },
-          ticks: { color: '#555', maxTicksLimit: 8 }
+          grid:  { color: () => cssVar('--chart-grid') },
+          ticks: { color: () => cssVar('--chart-ticks'), maxTicksLimit: 8 }
         },
         y: {
-          grid:  { color: '#2a2a2a' },
-          ticks: { color: '#555', callback: v => v + ' dB' }
+          grid:  { color: () => cssVar('--chart-grid') },
+          ticks: { color: () => cssVar('--chart-ticks'), callback: v => v + ' dB' }
         }
       }
     }
