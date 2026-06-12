@@ -45,21 +45,23 @@ pip install -r requirements.txt
 
 ## Verwendung
 
+Nach aktiviertem venv (oder nach `./start.sh` für den Einmalstart):
+
 ```bash
 # Normalbetrieb: TUI + API + Logging
-python main.py
+.venv/bin/python main.py
 
 # Anderen Port angeben
-python main.py --port /dev/ttyUSB0
+.venv/bin/python main.py --port /dev/ttyUSB0
 
 # Ohne TUI (nur API + Logging, z. B. als Hintergrunddienst)
-python main.py --no-tui
+.venv/bin/python main.py --no-tui
 
 # Protokoll-Diagnose: Rohbytes ausgeben
-python main.py --probe
+.venv/bin/python main.py --probe
 
 # Weitere Optionen
-python main.py --baud 2400 --api-port 8080
+.venv/bin/python main.py --baud 2400 --api-port 8080
 ```
 
 ## Konfiguration
@@ -90,6 +92,7 @@ port = 8080
 | `GET /health` | Verbindungsstatus des Sensors |
 | `GET /` | Web-Dashboard |
 | `GET /live` | Echtzeit-Seite |
+| `GET /settings` | Einstellungsseite (TA-Lärm-Grenzwerte) |
 
 Beispiel-Antwort `/current`:
 
@@ -113,14 +116,18 @@ Pakete sind 18 Byte lang, werden mit ~1 Hz gesendet.
 
 | Byte | Inhalt |
 |------|--------|
-| 0 | `0xa0` / `0xa1` Marker |
-| 1 | Bit 3: A(1)/C(0)-Gewichtung; Bit 2: SLOW(1)/FAST(0) |
+| 0 | `0xa0` / `0xa1` Marker (unteres Nibble: unbekanntes Statusbit) |
+| 1 | Bit 3 (`0x08`): A(1)/C(0)-Gewichtung; Bit 2 (`0x04`): SLOW(1)/FAST(0); oberes Nibble `0x4x` beobachtet, Bedeutung unbekannt |
 | 2 | `0x00` Konstante |
 | 3–5 | dB-Wert: unteres Nibble = Zehner, Einer, Zehntel |
 | 6–13 | Sync-Anker `00 00 00 01 00 01 00 00` |
 | 14–17 | Geräte-Uhr BCD: HH MM SS_Zehner SS_Einer |
 
+Bekannte Byte-1-Werte: `0x48` = A+FAST, `0x4c` = A+SLOW, `0x40` = C+FAST, `0x44` = C+SLOW.
+
 Sync-Strategie: Suche den 8-Byte-Anker ab Offset 6, gehe 6 Bytes zurück für den Paketanfang.
+
+> **Hinweis:** Range, Overflow und Underflow sind im Protokoll noch nicht dekodiert — `range_min/max` werden als 20/130 dB angenommen, `overflow`/`underflow` sind stets `false`.
 
 ## Projektstruktur
 
