@@ -214,11 +214,11 @@
   <div class="ctrl">
     <label for="inp-dur">Dauer</label>
     <select id="inp-dur">
-      <option value="1">1 Stunde</option>
+      <option value="1" selected>1 Stunde</option>
       <option value="3">3 Stunden</option>
       <option value="6">6 Stunden</option>
       <option value="12">12 Stunden</option>
-      <option value="24" selected>24 Stunden</option>
+      <option value="24">24 Stunden</option>
       <option value="48">48 Stunden</option>
       <option value="168">7 Tage</option>
     </select>
@@ -304,7 +304,14 @@ const limitPlugin = {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('inp-date').value = todayStr();
+  const since = new Date(Date.now() - 3600_000);
+  const y  = since.getFullYear();
+  const mo = String(since.getMonth() + 1).padStart(2, '0');
+  const d  = String(since.getDate()).padStart(2, '0');
+  const h  = String(since.getHours()).padStart(2, '0');
+  const mi = String(since.getMinutes()).padStart(2, '0');
+  document.getElementById('inp-date').value = `${y}-${mo}-${d}`;
+  document.getElementById('inp-time').value = `${h}:${mi}`;
   initChart();
   loadData();
   scheduleLive();
