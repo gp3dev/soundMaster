@@ -150,6 +150,43 @@
     .zone-table tr:last-child td { border-bottom: none; }
     .td-day   { color: var(--yellow); }
     .td-night { color: #4fc3f7; }
+
+    .card.wide { max-width: 720px; }
+
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .history-table th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 400;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      padding: 4px 8px 6px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .history-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .history-table tr:last-child td { border-bottom: none; }
+    .history-table tr.current-row td { background: rgba(1,120,212,.06); }
+    .btn-del {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 3px;
+      padding: 2px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-del:hover { border-color: #e53935; color: #e53935; }
+    .empty-hint { color: var(--muted); font-size: 12px; font-style: italic; }
   </style>
 </head>
 <body>
@@ -200,8 +237,18 @@
     </div>
   </div>
 
+  <div class="field">
+    <label for="inp-comment-loc">Kommentar (optional)</label>
+    <input type="text" id="inp-comment-loc" placeholder="z.B. Sensor nach Baustelle versetzt">
+  </div>
+
+  <div class="field">
+    <label for="inp-valid-from-loc">Gültig ab (leer = jetzt)</label>
+    <input type="datetime-local" id="inp-valid-from-loc">
+  </div>
+
   <div class="actions">
-    <button class="btn" onclick="saveMesstelle()">Speichern</button>
+    <button class="btn" onclick="saveAll()">Speichern</button>
     <button class="btn" id="btn-gps" onclick="detectLocation()">📍 GPS</button>
     <a class="btn btn-map disabled" id="btn-map" href="/map" target="_blank">🗺️ Auf Karte anzeigen</a>
     <span class="saved-msg" id="saved-msg-loc">Gespeichert ✓</span>
@@ -237,8 +284,15 @@
   <div class="limit-preview" id="preview"></div>
 
   <div class="actions">
-    <button class="btn" onclick="save()">Speichern</button>
+    <button class="btn" onclick="saveAll()">Speichern</button>
     <span class="saved-msg" id="saved-msg">Gespeichert ✓</span>
+  </div>
+</div>
+
+<div class="card wide">
+  <h2>Verlauf der Einstellungen</h2>
+  <div id="history-wrap">
+    <span class="empty-hint">Wird geladen…</span>
   </div>
 </div>
 
@@ -273,24 +327,45 @@ const ZONES = {
   industrie:  { day: 70, night: 70 },
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-  // Limits
-  const day   = parseFloat(localStorage.getItem('sm_limit_day')   ?? 60);
-  const night = parseFloat(localStorage.getItem('sm_limit_night') ?? 45);
-  document.getElementById('inp-day').value   = day;
-  document.getElementById('inp-night').value = night;
-  const savedZone = localStorage.getItem('sm_zone') ?? '';
-  document.getElementById('inp-zone').value = savedZone;
-  updatePreview();
+document.addEventListener('DOMContentLoaded', async () => {
+  document.getElementById('inp-day').addEventListener('input', updatePreview);
+  document.getElementById('inp-night').addEventListener('input', updatePreview);
 
-  // Messtelle
-  document.getElementById('inp-name').value = localStorage.getItem('sm_location_name') || '';
-  const lat = localStorage.getItem('sm_lat');
-  const lon = localStorage.getItem('sm_lon');
-  if (lat) document.getElementById('inp-lat').value = lat;
-  if (lon) document.getElementById('inp-lon').value = lon;
+  let s = null;
+  try {
+    const res = await fetch('/api/settings');
+    if (res.ok) s = await res.json();
+  } catch (_) {}
+
+  if (s) {
+    applyToForm(s);
+  } else {
+    // localStorage fallback
+    const day   = parseFloat(localStorage.getItem('sm_limit_day')   ?? 60);
+    const night = parseFloat(localStorage.getItem('sm_limit_night') ?? 45);
+    document.getElementById('inp-day').value   = day;
+    document.getElementById('inp-night').value = night;
+    document.getElementById('inp-zone').value  = localStorage.getItem('sm_zone') ?? '';
+    document.getElementById('inp-name').value  = localStorage.getItem('sm_location_name') || '';
+    const lat = localStorage.getItem('sm_lat');
+    const lon = localStorage.getItem('sm_lon');
+    if (lat) document.getElementById('inp-lat').value = lat;
+    if (lon) document.getElementById('inp-lon').value = lon;
+  }
+
+  updatePreview();
   syncMapBtn();
+  loadHistory();
 });
+
+function applyToForm(s) {
+  if (s.limit_day   != null) document.getElementById('inp-day').value   = s.limit_day;
+  if (s.limit_night != null) document.getElementById('inp-night').value = s.limit_night;
+  document.getElementById('inp-zone').value = s.zone  || '';
+  document.getElementById('inp-name').value = s.location_name || '';
+  if (s.lat != null) document.getElementById('inp-lat').value = s.lat;
+  if (s.lon != null) document.getElementById('inp-lon').value = s.lon;
+}
 
 function applyZone() {
   const key = document.getElementById('inp-zone').value;
@@ -313,40 +388,114 @@ function updatePreview() {
     `<div><span>Nacht</span><br><span class="lp-night">${night} dB(A)</span></div>`;
 }
 
-document.getElementById('inp-day').addEventListener('input', updatePreview);
-document.getElementById('inp-night').addEventListener('input', updatePreview);
-
-function save() {
+async function saveAll() {
   const day   = parseFloat(document.getElementById('inp-day').value);
   const night = parseFloat(document.getElementById('inp-night').value);
   if (isNaN(day) || isNaN(night)) return;
-  localStorage.setItem('sm_limit_day',   day);
-  localStorage.setItem('sm_limit_night', night);
-  localStorage.setItem('sm_zone', document.getElementById('inp-zone').value);
 
-  const msg = document.getElementById('saved-msg');
-  msg.classList.add('show');
-  setTimeout(() => msg.classList.remove('show'), 2000);
+  const name    = document.getElementById('inp-name').value.trim() || null;
+  const latVal  = document.getElementById('inp-lat').value;
+  const lonVal  = document.getElementById('inp-lon').value;
+  const lat     = latVal  ? parseFloat(latVal)  : null;
+  const lon     = lonVal  ? parseFloat(lonVal)  : null;
+  const zone    = document.getElementById('inp-zone').value || null;
+  const comment = document.getElementById('inp-comment-loc').value.trim() || null;
+  const vfRaw   = document.getElementById('inp-valid-from-loc').value;
+  const valid_from = vfRaw ? new Date(vfRaw).toISOString() : null;
+
+  const body = { limit_day: day, limit_night: night, location_name: name,
+                 lat, lon, zone, comment, valid_from };
+
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(await res.text());
+
+    // Keep localStorage in sync as fallback for other pages
+    localStorage.setItem('sm_limit_day',   day);
+    localStorage.setItem('sm_limit_night', night);
+    if (zone) localStorage.setItem('sm_zone', zone);
+    else      localStorage.removeItem('sm_zone');
+    if (name) localStorage.setItem('sm_location_name', name);
+    else      localStorage.removeItem('sm_location_name');
+    if (lat != null) localStorage.setItem('sm_lat', lat);
+    else             localStorage.removeItem('sm_lat');
+    if (lon != null) localStorage.setItem('sm_lon', lon);
+    else             localStorage.removeItem('sm_lon');
+
+    // Reset aux fields
+    document.getElementById('inp-comment-loc').value  = '';
+    document.getElementById('inp-valid-from-loc').value = '';
+
+    syncMapBtn();
+    ['saved-msg-loc', 'saved-msg'].forEach(id => {
+      const el = document.getElementById(id);
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2000);
+    });
+    loadHistory();
+  } catch (e) {
+    alert('Fehler beim Speichern: ' + e.message);
+  }
 }
 
-function saveMesstelle() {
-  const name = document.getElementById('inp-name').value.trim();
-  const lat  = document.getElementById('inp-lat').value;
-  const lon  = document.getElementById('inp-lon').value;
+async function deleteSettings(id) {
+  if (!confirm('Eintrag wirklich löschen?')) return;
+  try {
+    const res = await fetch(`/api/settings/${id}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 204) throw new Error(await res.text());
+    loadHistory();
+  } catch (e) {
+    alert('Fehler beim Löschen: ' + e.message);
+  }
+}
 
-  if (name) localStorage.setItem('sm_location_name', name);
-  else      localStorage.removeItem('sm_location_name');
+async function loadHistory() {
+  const wrap = document.getElementById('history-wrap');
+  try {
+    const res = await fetch('/api/settings/history');
+    if (!res.ok) throw new Error();
+    const { data } = await res.json();
+    if (!data.length) {
+      wrap.innerHTML = '<span class="empty-hint">Noch keine Einstellungen gespeichert.</span>';
+      return;
+    }
+    const currentId = data[data.length - 1].id;
+    const rows = [...data].reverse().map(s => {
+      const vf  = new Date(s.valid_from).toLocaleString('de-DE', { dateStyle:'short', timeStyle:'short' });
+      const loc = s.location_name || '–';
+      const tag = s.limit_day   != null ? `${s.limit_day} dB(A)`   : '–';
+      const nacht = s.limit_night != null ? `${s.limit_night} dB(A)` : '–';
+      const zone = s.zone || 'individuell';
+      const comment = s.comment ? `<br><span style="color:var(--muted);font-size:11px">${esc(s.comment)}</span>` : '';
+      const isCurrent = s.id === currentId;
+      return `<tr${isCurrent ? ' class="current-row"' : ''}>
+        <td>${vf}</td>
+        <td>${esc(loc)}${comment}</td>
+        <td class="td-day">${tag}</td>
+        <td class="td-night">${nacht}</td>
+        <td>${esc(zone)}</td>
+        <td><button class="btn-del" onclick="deleteSettings(${s.id})">Löschen</button></td>
+      </tr>`;
+    }).join('');
+    wrap.innerHTML = `<table class="history-table">
+      <thead><tr>
+        <th>Gültig ab</th><th>Ort</th>
+        <th class="td-day">Tag</th><th class="td-night">Nacht</th>
+        <th>Zone</th><th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  } catch (_) {
+    wrap.innerHTML = '<span class="empty-hint">Verlauf konnte nicht geladen werden.</span>';
+  }
+}
 
-  if (lat)  localStorage.setItem('sm_lat', parseFloat(lat));
-  else      localStorage.removeItem('sm_lat');
-
-  if (lon)  localStorage.setItem('sm_lon', parseFloat(lon));
-  else      localStorage.removeItem('sm_lon');
-
-  syncMapBtn();
-  const msg = document.getElementById('saved-msg-loc');
-  msg.classList.add('show');
-  setTimeout(() => msg.classList.remove('show'), 2000);
+function esc(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function syncMapBtn() {

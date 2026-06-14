@@ -10,6 +10,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 import db as database
 
@@ -247,6 +248,89 @@ def export_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+class SettingsIn(BaseModel):
+    valid_from: Optional[str] = None     # ISO 8601; default = now
+    location_name: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    zone: Optional[str] = None
+    limit_day: Optional[float] = None
+    limit_night: Optional[float] = None
+    comment: Optional[str] = None
+
+
+def _settings_to_dict(s) -> dict:
+    return {
+        "id":            s.id,
+        "created_at":    _ts_to_iso(s.created_at) if s.created_at else None,
+        "valid_from":    _ts_to_iso(s.valid_from),
+        "valid_from_unix": s.valid_from,
+        "location_name": s.location_name,
+        "lat":           s.lat,
+        "lon":           s.lon,
+        "zone":          s.zone,
+        "limit_day":     s.limit_day,
+        "limit_night":   s.limit_night,
+        "comment":       s.comment,
+    }
+
+
+@app.get("/api/settings")
+def api_settings_get(at: Optional[str] = Query(None, description="ISO 8601 timestamp")):
+    """Return the settings valid at the given time (default: now)."""
+    ts = None
+    if at is not None:
+        try:
+            ts = datetime.fromisoformat(at).timestamp()
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid timestamp: {e}")
+    s = database.settings_get(ts)
+    if s is None:
+        raise HTTPException(status_code=404, detail="No settings found")
+    return _settings_to_dict(s)
+
+
+@app.get("/api/settings/history")
+def api_settings_history():
+    """Return all settings records ordered by valid_from."""
+    rows = database.settings_list()
+    return {"count": len(rows), "data": [_settings_to_dict(s) for s in rows]}
+
+
+@app.post("/api/settings", status_code=201)
+def api_settings_post(body: SettingsIn):
+    """Create a new settings period."""
+    now = time.time()
+    if body.valid_from is not None:
+        try:
+            valid_from = datetime.fromisoformat(body.valid_from).timestamp()
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid valid_from: {e}")
+    else:
+        valid_from = now
+
+    s = database.Settings(
+        valid_from=valid_from,
+        location_name=body.location_name,
+        lat=body.lat,
+        lon=body.lon,
+        zone=body.zone,
+        limit_day=body.limit_day,
+        limit_night=body.limit_night,
+        comment=body.comment,
+    )
+    new_id = database.settings_save(s)
+    saved = database.settings_get(valid_from)
+    return _settings_to_dict(saved)
+
+
+@app.delete("/api/settings/{id}", status_code=204)
+def api_settings_delete(id: int):
+    """Delete a settings record by id."""
+    if not database.settings_delete(id):
+        raise HTTPException(status_code=404, detail="Settings record not found")
 
 
 app.mount("/", StaticFiles(directory=_WEB_DIR, html=True), name="web")

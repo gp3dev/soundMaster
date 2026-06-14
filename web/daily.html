@@ -162,12 +162,18 @@ let chart = null;
 const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 window.addEventListener('themechange', () => { if (chart) chart.update('none'); });
 
-function loadLimits() {
-  return {
-    day:   parseFloat(localStorage.getItem('sm_limit_day')   ?? 60),
-    night: parseFloat(localStorage.getItem('sm_limit_night') ?? 45),
-  };
-}
+let _cachedLimits = {
+  day:   parseFloat(localStorage.getItem('sm_limit_day')   ?? 60),
+  night: parseFloat(localStorage.getItem('sm_limit_night') ?? 45),
+};
+
+fetch('/api/settings').then(r => r.ok ? r.json() : null).then(s => {
+  if (!s) return;
+  _cachedLimits = { day: s.limit_day ?? _cachedLimits.day, night: s.limit_night ?? _cachedLimits.night };
+  if (chart) chart.update('none');
+}).catch(() => {});
+
+function loadLimits() { return _cachedLimits; }
 
 function setDays(n, btn) {
   document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));

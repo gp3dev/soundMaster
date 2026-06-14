@@ -19,6 +19,20 @@ class Measurement:
     underflow: bool = False
 
 
+@dataclass
+class Settings:
+    valid_from: float
+    location_name: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    zone: Optional[str] = None
+    limit_day: Optional[float] = None
+    limit_night: Optional[float] = None
+    comment: Optional[str] = None
+    id: Optional[int] = None
+    created_at: Optional[float] = None
+
+
 _local = threading.local()
 _db_path: Optional[Path] = None
 
@@ -65,6 +79,20 @@ def init(path: Path) -> None:
             underflow INTEGER
         );
         CREATE INDEX IF NOT EXISTS measurements_ts ON measurements(ts);
+
+        CREATE TABLE IF NOT EXISTS settings (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at    REAL NOT NULL,
+            valid_from    REAL NOT NULL,
+            location_name TEXT,
+            lat           REAL,
+            lon           REAL,
+            zone          TEXT,
+            limit_day     REAL,
+            limit_night   REAL,
+            comment       TEXT
+        );
+        CREATE INDEX IF NOT EXISTS settings_valid_from ON settings(valid_from);
     """)
     c.commit()
 
@@ -243,6 +271,65 @@ def query_raw_export(since: float, until: float):
         "SELECT ts, level_db, weighting, response FROM measurements "
         "WHERE ts BETWEEN ? AND ? ORDER BY ts",
         (since, until),
+    )
+
+
+def settings_get(ts: Optional[float] = None) -> Optional[Settings]:
+    """Return the settings valid at time ts (default: now)."""
+    if ts is None:
+        ts = time.time()
+    row = _conn().execute(
+        "SELECT * FROM settings WHERE valid_from <= ? ORDER BY valid_from DESC LIMIT 1",
+        (ts,),
+    ).fetchone()
+    return _row_to_settings(row) if row else None
+
+
+def settings_list() -> list[Settings]:
+    """Return all settings records ordered by valid_from ascending."""
+    rows = _conn().execute(
+        "SELECT * FROM settings ORDER BY valid_from ASC"
+    ).fetchall()
+    return [_row_to_settings(r) for r in rows]
+
+
+def settings_save(s: Settings) -> int:
+    """Insert a new settings record, return its id."""
+    now = time.time()
+    c = _conn()
+    cur = c.execute(
+        """
+        INSERT INTO settings
+          (created_at, valid_from, location_name, lat, lon, zone, limit_day, limit_night, comment)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (now, s.valid_from, s.location_name, s.lat, s.lon,
+         s.zone, s.limit_day, s.limit_night, s.comment),
+    )
+    c.commit()
+    return cur.lastrowid
+
+
+def settings_delete(id: int) -> bool:
+    """Delete a settings record by id. Returns True if a row was deleted."""
+    c = _conn()
+    cur = c.execute("DELETE FROM settings WHERE id = ?", (id,))
+    c.commit()
+    return cur.rowcount > 0
+
+
+def _row_to_settings(row: sqlite3.Row) -> Settings:
+    return Settings(
+        id=row["id"],
+        created_at=row["created_at"],
+        valid_from=row["valid_from"],
+        location_name=row["location_name"],
+        lat=row["lat"],
+        lon=row["lon"],
+        zone=row["zone"],
+        limit_day=row["limit_day"],
+        limit_night=row["limit_night"],
+        comment=row["comment"],
     )
 
 

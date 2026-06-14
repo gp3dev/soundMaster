@@ -172,10 +172,21 @@ function getParam(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
 
-function loadLimits() {
+let _cachedSettings = null;
+
+async function loadSettings() {
+  if (_cachedSettings) return _cachedSettings;
+  try {
+    const res = await fetch('/api/settings');
+    if (res.ok) _cachedSettings = await res.json();
+  } catch (_) {}
+  return _cachedSettings;
+}
+
+function loadLimits(s) {
   return {
-    day:   parseFloat(localStorage.getItem('sm_limit_day')   ?? 60),
-    night: parseFloat(localStorage.getItem('sm_limit_night') ?? 45),
+    day:   s?.limit_day   ?? parseFloat(localStorage.getItem('sm_limit_day')   ?? 60),
+    night: s?.limit_night ?? parseFloat(localStorage.getItem('sm_limit_night') ?? 45),
   };
 }
 
@@ -196,8 +207,9 @@ async function buildReport() {
     return;
   }
 
-  const { day: limDay, night: limNight } = loadLimits();
-  const locName = localStorage.getItem('sm_location_name') || 'Messstelle';
+  const s = await loadSettings();
+  const { day: limDay, night: limNight } = loadLimits(s);
+  const locName = s?.location_name || localStorage.getItem('sm_location_name') || 'Messstelle';
   const now = new Date();
 
   // Header & footer

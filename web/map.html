@@ -104,10 +104,20 @@
 <script>
 'use strict';
 
-document.addEventListener('DOMContentLoaded', () => {
-  const lat  = parseFloat(localStorage.getItem('sm_lat'));
-  const lon  = parseFloat(localStorage.getItem('sm_lon'));
-  const name = localStorage.getItem('sm_location_name') || 'Messstelle';
+document.addEventListener('DOMContentLoaded', async () => {
+  let lat, lon, name;
+  try {
+    const res = await fetch('/api/settings');
+    if (res.ok) {
+      const s = await res.json();
+      lat  = s.lat  ?? parseFloat(localStorage.getItem('sm_lat'));
+      lon  = s.lon  ?? parseFloat(localStorage.getItem('sm_lon'));
+      name = s.location_name || localStorage.getItem('sm_location_name') || 'Messstelle';
+    }
+  } catch (_) {}
+  if (lat == null) lat  = parseFloat(localStorage.getItem('sm_lat'));
+  if (lon == null) lon  = parseFloat(localStorage.getItem('sm_lon'));
+  if (!name)       name = localStorage.getItem('sm_location_name') || 'Messstelle';
 
   if (isNaN(lat) || isNaN(lon)) {
     document.getElementById('no-coords').style.display = 'block';
