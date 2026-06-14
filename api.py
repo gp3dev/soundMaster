@@ -100,6 +100,11 @@ def web_report():
     return FileResponse(os.path.join(_WEB_DIR, "report-print.html"))
 
 
+@app.get("/map", include_in_schema=False)
+def web_map():
+    return FileResponse(os.path.join(_WEB_DIR, "map.html"))
+
+
 @app.get("/health")
 def health():
     return {

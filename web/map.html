@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoundMaster · Karte</title>
+  <script src="/theme-init.js"></script>
+  <link rel="stylesheet" href="/nav.css">
+  <script src="/nav.js" defer></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/WLs=" crossorigin=""></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px;
+      height: 100vh; display: flex; flex-direction: column;
+    }
+    header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 { font-size: 18px; font-weight: 600; letter-spacing: .5px; }
+    .location-info {
+      margin-left: auto; text-align: right;
+      font-size: 12px; color: var(--muted);
+      line-height: 1.5;
+    }
+    .location-info strong { color: var(--text); font-size: 14px; display: block; }
+
+    #map { flex: 1; }
+
+    /* Override Leaflet popup in dark mode */
+    .leaflet-popup-content-wrapper {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 16px rgba(0,0,0,.4);
+    }
+    .leaflet-popup-tip { background: var(--surface); }
+    .leaflet-popup-content { margin: 12px 16px; font-size: 13px; line-height: 1.6; }
+    .popup-name { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+    .popup-coords { font-family: monospace; font-size: 12px; color: var(--muted); }
+
+    #no-coords {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 24px 32px; text-align: center; z-index: 1000;
+      max-width: 360px;
+    }
+    #no-coords h2 { margin-bottom: 8px; font-size: 16px; }
+    #no-coords p  { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+    #no-coords a  {
+      display: inline-block; padding: 8px 20px;
+      background: var(--blue); color: #fff; border-radius: 4px;
+      text-decoration: none; font-size: 13px;
+    }
+    #no-coords a:hover { opacity: .85; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="nav-wrap">
+    <button class="burger" onclick="navToggle()" aria-label="Menü">
+      <svg width="18" height="14" viewBox="0 0 18 14" fill="none">
+        <rect y="0"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="6"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="12" width="18" height="2" rx="1" fill="currentColor"/>
+      </svg>
+    </button>
+    <div class="nav-menu" id="nav-menu">
+      <a href="/"         class="nav-item">📊 Verlauf</a>
+      <a href="/live"     class="nav-item">📡 Live</a>
+      <a href="/profile"  class="nav-item">📈 Tagesganglinie</a>
+      <a href="/calendar" class="nav-item">📅 Kalender</a>
+      <a href="/daily"    class="nav-item">📋 Tages-Pegel</a>
+      <a href="/export"   class="nav-item">💾 Export</a>
+      <a href="/map"      class="nav-item active">🗺️ Karte</a>
+      <a href="/settings" class="nav-item">⚙️ Einstellungen</a>
+      <a href="/docs"     class="nav-item" target="_blank">📖 API Docs</a>
+    </div>
+  </div>
+  <h1>Karte</h1>
+  <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
+  <div class="location-info" id="loc-info" style="display:none">
+    <strong id="loc-name">–</strong>
+    <span id="loc-coords">–</span>
+  </div>
+</header>
+
+<div id="map"></div>
+
+<div id="no-coords" style="display:none">
+  <h2>Kein Standort gespeichert</h2>
+  <p>Bitte zuerst die Koordinaten der Messstelle in den Einstellungen hinterlegen.</p>
+  <a href="/settings">Zu den Einstellungen</a>
+</div>
+
+<script>
+'use strict';
+
+document.addEventListener('DOMContentLoaded', () => {
+  const lat  = parseFloat(localStorage.getItem('sm_lat'));
+  const lon  = parseFloat(localStorage.getItem('sm_lon'));
+  const name = localStorage.getItem('sm_location_name') || 'Messstelle';
+
+  if (isNaN(lat) || isNaN(lon)) {
+    document.getElementById('no-coords').style.display = 'block';
+    return;
+  }
+
+  // Header info
+  document.getElementById('loc-info').style.display = 'block';
+  document.getElementById('loc-name').textContent   = name;
+  document.getElementById('loc-coords').textContent = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+
+  // Map
+  const map = L.map('map', { zoomControl: true }).setView([lat, lon], 16);
+
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  });
+
+  const satellite = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, GIS User Community',
+    maxZoom: 19,
+  });
+
+  const satelliteLabels = L.tileLayer(
+    'https://stamen-tiles.a.ssl.fastly.net/toner-hybrid/{z}/{x}/{y}.png', {
+    attribution: 'Labels &copy; <a href="http://stamen.com">Stamen</a>',
+    maxZoom: 18,
+    opacity: 0.7,
+  });
+
+  osm.addTo(map);
+
+  L.control.layers(
+    { 'Straßenkarte (OSM)': osm, 'Satellit (Esri)': satellite },
+    {},
+    { position: 'topright' }
+  ).addTo(map);
+
+  // Marker with popup
+  const marker = L.marker([lat, lon]).addTo(map);
+  marker.bindPopup(`
+    <div class="popup-name">${name}</div>
+    <div class="popup-coords">${lat.toFixed(6)}, ${lon.toFixed(6)}</div>
+  `).openPopup();
+
+  // Crosshair circle for measurement uncertainty radius
+  L.circle([lat, lon], {
+    radius: 20,
+    color: '#e53935',
+    fillColor: '#e53935',
+    fillOpacity: 0.08,
+    weight: 1.5,
+  }).addTo(map);
+});
+</script>
+</body>
+</html>
