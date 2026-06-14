@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoundMaster · Tages-Pegel</title>
+  <script src="/theme-init.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <link rel="stylesheet" href="/nav.css">
+  <script src="/nav.js" defer></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px;
+      min-height: 100vh; padding: 16px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    header { display: flex; align-items: center; gap: 12px; }
+    h1 { font-size: 18px; font-weight: 600; letter-spacing: .5px; }
+
+    .ctrl-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .btn-group { display: flex; gap: 4px; }
+    .btn {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 6px 12px; border-radius: 4px;
+      cursor: pointer; font-size: 13px; font-family: inherit;
+    }
+    .btn:hover { background: var(--nav-hover); }
+    .btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+    input[type=date] {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 6px 8px; border-radius: 4px;
+      font-size: 13px; font-family: inherit;
+    }
+
+    .chart-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 14px; min-height: 260px; position: relative;
+    }
+
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    @media (max-width: 600px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+    .stat {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 14px;
+    }
+    .stat-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+    .stat-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 3px; }
+
+    .table-wrap {
+      overflow-x: auto;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: left; padding: 9px 12px;
+      font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted);
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+      background: var(--bg);
+    }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    .ok   { color: var(--green); }
+    .warn { color: var(--yellow); }
+    .over { color: var(--red); }
+    .muted { color: var(--muted); }
+    .badge {
+      display: inline-block; padding: 2px 7px; border-radius: 10px;
+      font-size: 11px; font-weight: 700;
+    }
+    .badge-ok   { background: rgba(46,125,50,.15); color: var(--green); }
+    .badge-over { background: rgba(229,57,53,.15); color: var(--red); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="nav-wrap">
+    <button class="burger" onclick="navToggle()" aria-label="Menü">
+      <svg width="18" height="14" viewBox="0 0 18 14" fill="none">
+        <rect y="0"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="6"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="12" width="18" height="2" rx="1" fill="currentColor"/>
+      </svg>
+    </button>
+    <div class="nav-menu" id="nav-menu">
+      <a href="/"         class="nav-item">📊 Verlauf</a>
+      <a href="/live"     class="nav-item">📡 Live</a>
+      <a href="/profile"  class="nav-item">📈 Tagesganglinie</a>
+      <a href="/calendar" class="nav-item">📅 Kalender</a>
+      <a href="/daily"    class="nav-item active">📋 Tages-Pegel</a>
+      <a href="/export"   class="nav-item">💾 Export</a>
+      <a href="/settings" class="nav-item">⚙️ Einstellungen</a>
+      <a href="/docs"     class="nav-item" target="_blank">📖 API Docs</a>
+    </div>
+  </div>
+  <h1>Tages-Beurteilungspegel</h1>
+  <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
+</header>
+
+<div class="ctrl-bar">
+  <div class="btn-group">
+    <button class="btn active" id="btn30" onclick="setDays(30, this)">30 Tage</button>
+    <button class="btn"        id="btn90" onclick="setDays(90, this)">90 Tage</button>
+    <button class="btn"        id="btn180" onclick="setDays(180, this)">6 Monate</button>
+  </div>
+  <input type="date" id="inp-since" onchange="clearPreset()">
+  <input type="date" id="inp-until" onchange="clearPreset()">
+  <button class="btn" onclick="loadData()">Laden</button>
+</div>
+
+<div class="chart-wrap">
+  <canvas id="chart"></canvas>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-lbl">Tage gemessen</div>
+    <div class="stat-val" id="s-days" style="color:var(--text)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Überschr. Tag</div>
+    <div class="stat-val" id="s-over-day" style="color:var(--red)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Überschr. Nacht</div>
+    <div class="stat-val" id="s-over-night" style="color:var(--red)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Max. L_Tag</div>
+    <div class="stat-val" id="s-max" style="color:var(--red)">–</div>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Datum</th>
+        <th>L_Tag dB(A)</th>
+        <th>Grenzw. Tag</th>
+        <th>L_Nacht dB(A)</th>
+        <th>Grenzw. Nacht</th>
+        <th>L_DEN dB(A)</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="tbl-body">
+      <tr><td colspan="7" class="muted" style="text-align:center;padding:20px">Daten laden …</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+'use strict';
+
+let chart = null;
+
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+window.addEventListener('themechange', () => { if (chart) chart.update('none'); });
+
+function loadLimits() {
+  return {
+    day:   parseFloat(localStorage.getItem('sm_limit_day')   ?? 60),
+    night: parseFloat(localStorage.getItem('sm_limit_night') ?? 45),
+  };
+}
+
+function setDays(n, btn) {
+  document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const until = new Date();
+  const since = new Date(+until - n * 86400_000);
+  document.getElementById('inp-since').value = since.toISOString().slice(0, 10);
+  document.getElementById('inp-until').value = until.toISOString().slice(0, 10);
+  loadData();
+}
+
+function clearPreset() {
+  document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
+}
+
+const limitPlugin = {
+  id: 'limitLines',
+  afterDraw(ch) {
+    const { ctx, chartArea, scales } = ch;
+    if (!chartArea) return;
+    const { day, night } = loadLimits();
+    [[day, '#ffc107', `Tag ${day} dB(A)`], [night, '#4fc3f7', `Nacht ${night} dB(A)`]]
+      .forEach(([val, color, label]) => {
+        const y = scales.y.getPixelForValue(val);
+        if (y < chartArea.top || y > chartArea.bottom) return;
+        ctx.save();
+        ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.setLineDash([6, 4]);
+        ctx.moveTo(chartArea.left, y); ctx.lineTo(chartArea.right, y); ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.font = '11px Segoe UI,system-ui,sans-serif';
+        ctx.fillText(label, chartArea.left + 6, y - 4);
+        ctx.restore();
+      });
+  }
+};
+
+function initChart() {
+  const ctx = document.getElementById('chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'L_Tag',
+          data: [],
+          borderColor: '#ffc107',
+          backgroundColor: 'rgba(255,193,7,0.08)',
+          borderWidth: 1.5,
+          pointRadius: 3,
+          tension: 0.2,
+        },
+        {
+          label: 'L_Nacht',
+          data: [],
+          borderColor: '#4fc3f7',
+          backgroundColor: 'rgba(79,195,247,0.08)',
+          borderWidth: 1.5,
+          pointRadius: 3,
+          tension: 0.2,
+        },
+        {
+          label: 'L_DEN',
+          data: [],
+          borderColor: '#e53935',
+          backgroundColor: 'transparent',
+          borderWidth: 1,
+          pointRadius: 2,
+          borderDash: [4, 3],
+          tension: 0.2,
+        },
+      ]
+    },
+    plugins: [limitPlugin],
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          labels: { color: () => cssVar('--text'), boxWidth: 16, font: { size: 12 } }
+        },
+        tooltip: {
+          backgroundColor: '#111', borderColor: '#333', borderWidth: 1, padding: 8,
+          callbacks: {
+            title(items) {
+              return new Date(items[0].parsed.x).toLocaleDateString('de-DE',
+                { weekday:'short', day:'2-digit', month:'2-digit', year:'numeric' });
+            },
+            label(item) {
+              const v = item.parsed.y;
+              return v != null ? `  ${item.dataset.label}: ${v.toFixed(1)} dB(A)` : null;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'day', displayFormats: { day: 'dd.MM.' } },
+          grid:  { color: () => cssVar('--chart-grid') },
+          ticks: { color: () => cssVar('--chart-ticks'), maxTicksLimit: 10 }
+        },
+        y: {
+          grid:  { color: () => cssVar('--chart-grid') },
+          ticks: { color: () => cssVar('--chart-ticks'), callback: v => v + ' dB' }
+        }
+      }
+    }
+  });
+}
+
+async function loadData() {
+  const since = document.getElementById('inp-since').value;
+  const until = document.getElementById('inp-until').value;
+  if (!since || !until) return;
+  try {
+    const resp = await fetch(`/stats/daily?since=${since}T00:00:00&until=${until}T23:59:59`);
+    if (!resp.ok) return;
+    renderData(await resp.json());
+  } catch(e) { console.error(e); }
+}
+
+function fmtDb(v) { return v != null ? v.toFixed(1) : '–'; }
+function delta(v, limit) {
+  if (v == null) return '<span class="muted">–</span>';
+  const d = v - limit;
+  const sign = d > 0 ? '+' : '';
+  const cls = d > 0 ? 'over' : 'ok';
+  return `<span class="${cls}">${sign}${d.toFixed(1)} dB</span>`;
+}
+
+function renderData(json) {
+  const { day: limDay, night: limNight } = loadLimits();
+  const rows = json.data;
+
+  // Chart data
+  const tagData = [], nachtData = [], denData = [];
+  rows.forEach(r => {
+    const x = new Date(r.day + 'T12:00:00').getTime();
+    if (r.l_tag   != null) tagData.push({ x, y: r.l_tag });
+    if (r.l_nacht != null) nachtData.push({ x, y: r.l_nacht });
+    if (r.l_den   != null) denData.push({ x, y: r.l_den });
+  });
+
+  chart.data.datasets[0].data = tagData;
+  chart.data.datasets[1].data = nachtData;
+  chart.data.datasets[2].data = denData;
+
+  // Y-axis range
+  const allVals = [...tagData, ...nachtData, ...denData].map(p => p.y);
+  if (allVals.length) {
+    chart.options.scales.y.min = Math.max(0, Math.floor(Math.min(...allVals, limNight) - 3));
+    chart.options.scales.y.max = Math.ceil(Math.max(...allVals, limDay) + 3);
+  }
+  chart.update('none');
+
+  // Stats
+  let overDay = 0, overNight = 0, maxTag = -Infinity;
+  rows.forEach(r => {
+    if (r.l_tag   != null && r.l_tag   > limDay)   overDay++;
+    if (r.l_nacht != null && r.l_nacht > limNight) overNight++;
+    if (r.l_tag   != null && r.l_tag   > maxTag)   maxTag = r.l_tag;
+  });
+  document.getElementById('s-days').textContent      = rows.length;
+  document.getElementById('s-over-day').textContent  = overDay;
+  document.getElementById('s-over-night').textContent = overNight;
+  document.getElementById('s-max').textContent       = maxTag > -Infinity ? maxTag.toFixed(1) + ' dB' : '–';
+
+  // Table (newest first)
+  const tbody = document.getElementById('tbl-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="muted" style="text-align:center;padding:20px">Keine Daten</td></tr>';
+    return;
+  }
+  tbody.innerHTML = [...rows].reverse().map(r => {
+    const dayOk    = r.l_tag   == null || r.l_tag   <= limDay;
+    const nightOk  = r.l_nacht == null || r.l_nacht <= limNight;
+    const allOk    = dayOk && nightOk;
+    const badge    = `<span class="badge ${allOk ? 'badge-ok' : 'badge-over'}">${allOk ? '✓' : '✗'}</span>`;
+    return `<tr>
+      <td>${r.day}</td>
+      <td>${fmtDb(r.l_tag)}</td>
+      <td>${delta(r.l_tag, limDay)}</td>
+      <td>${fmtDb(r.l_nacht)}</td>
+      <td>${delta(r.l_nacht, limNight)}</td>
+      <td class="muted">${fmtDb(r.l_den)}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initChart();
+  setDays(30, document.getElementById('btn30'));
+});
+</script>
+</body>
+</html>

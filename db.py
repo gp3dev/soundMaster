@@ -30,8 +30,9 @@ class _LeqAggregate:
         self._n = 0
 
     def step(self, db: float) -> None:
-        self._sum += 10 ** (db / 10)
-        self._n += 1
+        if db is not None:
+            self._sum += 10 ** (db / 10)
+            self._n += 1
 
     def finalize(self) -> Optional[float]:
         return 10 * math.log10(self._sum / self._n) if self._n else None
@@ -150,6 +151,99 @@ def query_aggregate(since: float, until: float, bucket_seconds: float) -> list[d
         }
         for row in rows
     ]
+
+
+def query_daily_levels(since: float, until: float) -> list[dict]:
+    """Return per-calendar-day L_Tag, L_Nacht, and L_DEN for the given range.
+
+    Time periods (local time):
+    - L_Tag  (16. BImSchV): 06:00–22:00
+    - L_Nacht (16. BImSchV): 22:00–06:00
+    - L_DEN components (EU 2002/49/EG): day 07–19, evening 19–23 (+5 dB), night 23–07 (+10 dB)
+    """
+    c = _conn()
+    rows = c.execute(
+        """
+        SELECT
+          date(ts, 'unixepoch', 'localtime') AS day,
+          leq(CASE WHEN CAST(strftime('%H', datetime(ts, 'unixepoch', 'localtime')) AS INTEGER)
+                   BETWEEN 6 AND 21 THEN level_db END)      AS l_tag,
+          leq(CASE WHEN CAST(strftime('%H', datetime(ts, 'unixepoch', 'localtime')) AS INTEGER)
+                   NOT BETWEEN 6 AND 21 THEN level_db END)  AS l_nacht,
+          leq(CASE WHEN CAST(strftime('%H', datetime(ts, 'unixepoch', 'localtime')) AS INTEGER)
+                   BETWEEN 7 AND 18 THEN level_db END)      AS l_day_den,
+          leq(CASE WHEN CAST(strftime('%H', datetime(ts, 'unixepoch', 'localtime')) AS INTEGER)
+                   BETWEEN 19 AND 22 THEN level_db END)     AS l_eve_den,
+          leq(CASE WHEN CAST(strftime('%H', datetime(ts, 'unixepoch', 'localtime')) AS INTEGER)
+                   NOT BETWEEN 7 AND 22 THEN level_db END)  AS l_night_den,
+          leq(level_db)                                     AS l_total,
+          COUNT(*)                                          AS n
+        FROM measurements
+        WHERE ts BETWEEN ? AND ?
+        GROUP BY day
+        ORDER BY day
+        """,
+        (since, until),
+    ).fetchall()
+
+    result = []
+    for row in rows:
+        l_d, l_e, l_n = row["l_day_den"], row["l_eve_den"], row["l_night_den"]
+        l_den = None
+        if l_d is not None and l_e is not None and l_n is not None:
+            l_den = round(10 * math.log10(
+                12 / 24 * 10 ** (l_d / 10) +
+                 4 / 24 * 10 ** ((l_e + 5) / 10) +
+                 8 / 24 * 10 ** ((l_n + 10) / 10)
+            ), 1)
+        result.append({
+            "day":     row["day"],
+            "l_tag":   round(row["l_tag"],   1) if row["l_tag"]   is not None else None,
+            "l_nacht": round(row["l_nacht"], 1) if row["l_nacht"] is not None else None,
+            "l_den":   l_den,
+            "l_total": round(row["l_total"], 1) if row["l_total"] is not None else None,
+            "count":   row["n"],
+        })
+    return result
+
+
+def query_hourly_profile(since: float, until: float) -> list[dict]:
+    """Return energy-averaged LAeq per hour-of-day across all days in range."""
+    c = _conn()
+    rows = c.execute(
+        """
+        SELECT
+          CAST(strftime('%H', datetime(ts, 'unixepoch', 'localtime')) AS INTEGER) AS hour,
+          leq(level_db)  AS leq_db,
+          MIN(level_db)  AS min_db,
+          MAX(level_db)  AS max_db,
+          COUNT(*)       AS n
+        FROM measurements
+        WHERE ts BETWEEN ? AND ?
+        GROUP BY hour
+        ORDER BY hour
+        """,
+        (since, until),
+    ).fetchall()
+    return [
+        {
+            "hour":   row["hour"],
+            "leq_db": round(row["leq_db"], 1) if row["leq_db"] is not None else None,
+            "min_db": round(row["min_db"], 1),
+            "max_db": round(row["max_db"], 1),
+            "count":  row["n"],
+        }
+        for row in rows
+    ]
+
+
+def query_raw_export(since: float, until: float):
+    """Return a cursor over (ts, level_db, weighting, response) in chronological order."""
+    return _conn().execute(
+        "SELECT ts, level_db, weighting, response FROM measurements "
+        "WHERE ts BETWEEN ? AND ? ORDER BY ts",
+        (since, until),
+    )
 
 
 def _row_to_measurement(row: sqlite3.Row) -> Measurement:

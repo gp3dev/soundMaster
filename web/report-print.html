@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lärmbericht – A6 Dechendorf</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;
+      color: #111; background: #fff;
+      padding: 32px; max-width: 800px; margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    .report-header { border-bottom: 2px solid #333; padding-bottom: 16px; margin-bottom: 24px; }
+    .report-header h1 { font-size: 22px; font-weight: 700; }
+    .report-header .sub { font-size: 13px; color: #555; margin-top: 4px; }
+    .meta-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+      margin: 20px 0; padding: 14px;
+      background: #f5f5f5; border-radius: 4px;
+    }
+    .meta-item .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #777; }
+    .meta-item .val { font-size: 15px; font-weight: 600; margin-top: 2px; }
+
+    h2 { font-size: 14px; font-weight: 700; margin: 20px 0 10px; text-transform: uppercase; letter-spacing: .4px; }
+
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+    .summary-item {
+      border: 1px solid #ddd; border-radius: 4px; padding: 10px 12px; text-align: center;
+    }
+    .summary-item .lbl { font-size: 10px; text-transform: uppercase; color: #777; }
+    .summary-item .val { font-size: 20px; font-weight: 700; margin-top: 3px; }
+    .val-ok   { color: #2e7d32; }
+    .val-warn { color: #c77700; }
+    .val-over { color: #c62828; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
+    th {
+      text-align: left; padding: 7px 10px;
+      background: #f0f0f0; border: 1px solid #ddd;
+      font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #555;
+    }
+    td { padding: 6px 10px; border: 1px solid #ddd; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .over { color: #c62828; font-weight: 600; }
+    .ok   { color: #2e7d32; }
+    .muted { color: #999; }
+
+    .norm-note {
+      font-size: 11px; color: #666; margin-top: 8px; line-height: 1.6;
+      padding: 10px 14px; background: #f9f9f9; border-left: 3px solid #ddd;
+    }
+
+    .report-footer {
+      margin-top: 32px; padding-top: 12px; border-top: 1px solid #ddd;
+      font-size: 11px; color: #999; display: flex; justify-content: space-between;
+    }
+
+    .print-btn {
+      display: inline-block; padding: 10px 20px; background: #0178d4; color: #fff;
+      border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .print-btn:hover { opacity: .85; }
+
+    #loading { text-align: center; padding: 40px; color: #999; font-size: 16px; }
+    #content { display: none; }
+
+    @media print {
+      .print-btn { display: none; }
+      #loading { display: none !important; }
+      #content { display: block !important; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<button class="print-btn" onclick="window.print()">🖨 Als PDF drucken</button>
+
+<div id="loading">Bericht wird erstellt …</div>
+
+<div id="content">
+  <div class="report-header">
+    <h1>Lärmmessbericht – A6 Dechendorf</h1>
+    <div class="sub">Dokumentation der Straßenlärmbelastung nach Sechsspurausbau</div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-item">
+      <div class="lbl">Messzeitraum</div>
+      <div class="val" id="m-zeitraum">–</div>
+    </div>
+    <div class="meta-item">
+      <div class="lbl">Messgerät</div>
+      <div class="val">Laserliner SoundTest-Master</div>
+    </div>
+    <div class="meta-item">
+      <div class="lbl">Erstellungsdatum</div>
+      <div class="val" id="m-erstellt">–</div>
+    </div>
+    <div class="meta-item">
+      <div class="lbl">Grenzwert Tag (16. BImSchV)</div>
+      <div class="val" id="m-lim-day">–</div>
+    </div>
+    <div class="meta-item">
+      <div class="lbl">Grenzwert Nacht (16. BImSchV)</div>
+      <div class="val" id="m-lim-night">–</div>
+    </div>
+    <div class="meta-item">
+      <div class="lbl">Messtage</div>
+      <div class="val" id="m-days">–</div>
+    </div>
+  </div>
+
+  <h2>Übersicht</h2>
+  <div class="summary-grid">
+    <div class="summary-item">
+      <div class="lbl">Überschr. Tag</div>
+      <div class="val" id="s-over-day">–</div>
+    </div>
+    <div class="summary-item">
+      <div class="lbl">Überschr. Nacht</div>
+      <div class="val" id="s-over-night">–</div>
+    </div>
+    <div class="summary-item">
+      <div class="lbl">Max. L_Tag</div>
+      <div class="val" id="s-max-tag">–</div>
+    </div>
+    <div class="summary-item">
+      <div class="lbl">Max. L_Nacht</div>
+      <div class="val" id="s-max-nacht">–</div>
+    </div>
+  </div>
+
+  <h2>Tages-Beurteilungspegel (16. BImSchV)</h2>
+  <table id="daily-table">
+    <thead>
+      <tr>
+        <th>Datum</th>
+        <th>L_Tag dB(A)<br><span style="font-weight:400">(06–22 Uhr)</span></th>
+        <th>Δ Grenzw. Tag</th>
+        <th>L_Nacht dB(A)<br><span style="font-weight:400">(22–06 Uhr)</span></th>
+        <th>Δ Grenzw. Nacht</th>
+        <th>L_DEN dB(A)</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="tbl-body"></tbody>
+  </table>
+
+  <div class="norm-note">
+    <strong>Normen und Grundlagen:</strong><br>
+    L_Tag und L_Nacht: Beurteilungspegel nach 16. BImSchV (Verkehrslärmschutzverordnung).<br>
+    L_DEN: Day-Evening-Night Level nach EU-Umgebungslärmrichtlinie 2002/49/EG
+    (Tag 07–19 Uhr, Abend 19–23 Uhr + 5 dB, Nacht 23–07 Uhr + 10 dB).<br>
+    Messgröße: LAeq, A-bewertet, SLOW-Zeitkonstante. Messintervall: ~1 Hz.
+  </div>
+
+  <div class="report-footer">
+    <span>Erstellt mit SoundMaster · Messort: A6 Dechendorf</span>
+    <span id="footer-date">–</span>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+function getParam(name) {
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+function loadLimits() {
+  return {
+    day:   parseFloat(localStorage.getItem('sm_limit_day')   ?? 60),
+    night: parseFloat(localStorage.getItem('sm_limit_night') ?? 45),
+  };
+}
+
+function fmtDb(v) { return v != null ? v.toFixed(1) + ' dB(A)' : '–'; }
+function delta(v, limit) {
+  if (v == null) return '<span class="muted">–</span>';
+  const d = v - limit;
+  const sign = d > 0 ? '+' : '';
+  const cls = d > 0 ? 'over' : 'ok';
+  return `<span class="${cls}">${sign}${d.toFixed(1)} dB</span>`;
+}
+
+async function buildReport() {
+  const since = getParam('since');
+  const until = getParam('until');
+  if (!since || !until) {
+    document.getElementById('loading').textContent = 'Fehler: Kein Zeitraum angegeben.';
+    return;
+  }
+
+  const { day: limDay, night: limNight } = loadLimits();
+  const now = new Date();
+
+  // Meta
+  const sinceDate = since.slice(0, 10);
+  const untilDate = until.slice(0, 10);
+  document.getElementById('m-zeitraum').textContent  = `${sinceDate} – ${untilDate}`;
+  document.getElementById('m-erstellt').textContent  = now.toLocaleDateString('de-DE');
+  document.getElementById('m-lim-day').textContent   = limDay + ' dB(A)';
+  document.getElementById('m-lim-night').textContent = limNight + ' dB(A)';
+  document.getElementById('footer-date').textContent = now.toLocaleString('de-DE');
+
+  try {
+    const resp = await fetch(`/stats/daily?since=${since}&until=${until}`);
+    if (!resp.ok) throw new Error(resp.status);
+    const json = await resp.json();
+    const rows = json.data;
+
+    document.getElementById('m-days').textContent = rows.length;
+
+    let overDay = 0, overNight = 0, maxTag = -Infinity, maxNacht = -Infinity;
+    rows.forEach(r => {
+      if (r.l_tag   != null && r.l_tag   > limDay)   overDay++;
+      if (r.l_nacht != null && r.l_nacht > limNight) overNight++;
+      if (r.l_tag   != null && r.l_tag   > maxTag)   maxTag   = r.l_tag;
+      if (r.l_nacht != null && r.l_nacht > maxNacht) maxNacht = r.l_nacht;
+    });
+
+    const valClass = n => n > 0 ? 'val-over' : 'val-ok';
+    document.getElementById('s-over-day').innerHTML   = `<span class="${valClass(overDay)}">${overDay}</span>`;
+    document.getElementById('s-over-night').innerHTML = `<span class="${valClass(overNight)}">${overNight}</span>`;
+    document.getElementById('s-max-tag').textContent   = maxTag   > -Infinity ? maxTag.toFixed(1)   + ' dB' : '–';
+    document.getElementById('s-max-nacht').textContent = maxNacht > -Infinity ? maxNacht.toFixed(1) + ' dB' : '–';
+
+    const tbody = document.getElementById('tbl-body');
+    tbody.innerHTML = rows.map(r => {
+      const dayOk   = r.l_tag   == null || r.l_tag   <= limDay;
+      const nightOk = r.l_nacht == null || r.l_nacht <= limNight;
+      const status  = (dayOk && nightOk) ? '<span class="ok">✓ eingehalten</span>'
+                                         : '<span class="over">✗ überschritten</span>';
+      return `<tr>
+        <td>${r.day}</td>
+        <td>${fmtDb(r.l_tag)}</td>
+        <td>${delta(r.l_tag,   limDay)}</td>
+        <td>${fmtDb(r.l_nacht)}</td>
+        <td>${delta(r.l_nacht, limNight)}</td>
+        <td class="muted">${fmtDb(r.l_den)}</td>
+        <td>${status}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+  } catch(e) {
+    document.getElementById('loading').textContent = 'Fehler beim Laden der Daten: ' + e.message;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', buildReport);
+</script>
+</body>
+</html>

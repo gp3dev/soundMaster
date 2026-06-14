@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoundMaster · Kalender</title>
+  <script src="/theme-init.js"></script>
+  <link rel="stylesheet" href="/nav.css">
+  <script src="/nav.js" defer></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px;
+      min-height: 100vh; padding: 16px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    header { display: flex; align-items: center; gap: 12px; }
+    h1 { font-size: 18px; font-weight: 600; letter-spacing: .5px; }
+
+    .month-nav {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .month-nav h2 { font-size: 16px; font-weight: 600; min-width: 160px; text-align: center; }
+    .btn {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 6px 12px; border-radius: 4px;
+      cursor: pointer; font-size: 13px; font-family: inherit;
+    }
+    .btn:hover { background: var(--nav-hover); }
+
+    .cal-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; overflow: hidden;
+    }
+    .cal-grid {
+      display: grid; grid-template-columns: repeat(7, 1fr);
+    }
+    .cal-hdr {
+      padding: 8px 4px; text-align: center;
+      font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .cal-cell {
+      min-height: 72px; padding: 6px 8px;
+      border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 3px;
+      position: relative;
+    }
+    .cal-cell:nth-child(7n) { border-right: none; }
+    .cal-cell.empty { background: var(--bg); opacity: .4; }
+    .cal-day { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .cal-db  { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+    .cal-sub { font-size: 10px; color: var(--muted); }
+
+    /* Color coding by exceedance vs day limit */
+    .cal-cell.ok     { background: rgba(46,125,50,  0.08); }
+    .cal-cell.warn   { background: rgba(255,193,7,  0.12); }
+    .cal-cell.over   { background: rgba(229,57,53,  0.12); }
+    .cal-cell.over   .cal-db { color: var(--red); }
+    .cal-cell.warn   .cal-db { color: var(--yellow); }
+    .cal-cell.ok     .cal-db { color: var(--green); }
+    .cal-cell.nodata .cal-db { color: var(--muted); }
+
+    .legend {
+      display: flex; gap: 16px; padding: 10px 14px;
+      font-size: 12px; color: var(--muted); flex-wrap: wrap;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-dot {
+      width: 12px; height: 12px; border-radius: 2px;
+      border: 1px solid var(--border);
+    }
+    .ld-ok   { background: rgba(46,125,50, 0.3); }
+    .ld-warn { background: rgba(255,193,7,  0.3); }
+    .ld-over { background: rgba(229,57,53,  0.3); }
+    .ld-none { background: var(--bg); }
+
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    @media (max-width: 600px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+    .stat {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 14px;
+    }
+    .stat-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+    .stat-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="nav-wrap">
+    <button class="burger" onclick="navToggle()" aria-label="Menü">
+      <svg width="18" height="14" viewBox="0 0 18 14" fill="none">
+        <rect y="0"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="6"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="12" width="18" height="2" rx="1" fill="currentColor"/>
+      </svg>
+    </button>
+    <div class="nav-menu" id="nav-menu">
+      <a href="/"         class="nav-item">📊 Verlauf</a>
+      <a href="/live"     class="nav-item">📡 Live</a>
+      <a href="/profile"  class="nav-item">📈 Tagesganglinie</a>
+      <a href="/calendar" class="nav-item active">📅 Kalender</a>
+      <a href="/daily"    class="nav-item">📋 Tages-Pegel</a>
+      <a href="/export"   class="nav-item">💾 Export</a>
+      <a href="/settings" class="nav-item">⚙️ Einstellungen</a>
+      <a href="/docs"     class="nav-item" target="_blank">📖 API Docs</a>
+    </div>
+  </div>
+  <h1>Kalender</h1>
+  <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
+</header>
+
+<div class="month-nav">
+  <button class="btn" onclick="shiftMonth(-1)">&#8592;</button>
+  <h2 id="month-label">–</h2>
+  <button class="btn" onclick="shiftMonth(+1)">&#8594;</button>
+</div>
+
+<div class="cal-wrap">
+  <div class="cal-grid" id="cal-grid">
+    <div class="cal-hdr">Mo</div>
+    <div class="cal-hdr">Di</div>
+    <div class="cal-hdr">Mi</div>
+    <div class="cal-hdr">Do</div>
+    <div class="cal-hdr">Fr</div>
+    <div class="cal-hdr">Sa</div>
+    <div class="cal-hdr">So</div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot ld-ok"></div>Unter Grenzwert</div>
+    <div class="legend-item"><div class="legend-dot ld-warn"></div>Bis 3 dB über Grenzwert</div>
+    <div class="legend-item"><div class="legend-dot ld-over"></div>Über 3 dB über Grenzwert</div>
+    <div class="legend-item"><div class="legend-dot ld-none"></div>Keine Daten</div>
+    <div class="legend-item" style="margin-left:auto;color:var(--muted)">Grenzwert Tag (aus Einstellungen)</div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-lbl">Tage mit Daten</div>
+    <div class="stat-val" id="s-days" style="color:var(--text)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Überschreitungen Tag</div>
+    <div class="stat-val" id="s-over" style="color:var(--red)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Monats-LAeq (gesamt)</div>
+    <div class="stat-val" id="s-leq" style="color:var(--blue)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Max. Tagespegel</div>
+    <div class="stat-val" id="s-max" style="color:var(--red)">–</div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const MONTHS_DE = ['Januar','Februar','März','April','Mai','Juni',
+                   'Juli','August','September','Oktober','November','Dezember'];
+
+let currentYear  = new Date().getFullYear();
+let currentMonth = new Date().getMonth(); // 0-based
+
+function loadLimits() {
+  return {
+    day:   parseFloat(localStorage.getItem('sm_limit_day')   ?? 60),
+    night: parseFloat(localStorage.getItem('sm_limit_night') ?? 45),
+  };
+}
+
+function shiftMonth(delta) {
+  currentMonth += delta;
+  if (currentMonth > 11) { currentMonth = 0;  currentYear++; }
+  if (currentMonth <  0) { currentMonth = 11; currentYear--; }
+  loadMonth();
+}
+
+async function loadMonth() {
+  document.getElementById('month-label').textContent =
+    `${MONTHS_DE[currentMonth]} ${currentYear}`;
+
+  const since = `${currentYear}-${String(currentMonth + 1).padStart(2,'0')}-01`;
+  const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const until = `${currentYear}-${String(currentMonth + 1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
+  try {
+    const resp = await fetch(`/stats/daily?since=${since}T00:00:00&until=${until}T23:59:59`);
+    if (!resp.ok) return;
+    renderCalendar(await resp.json(), currentYear, currentMonth, since, until);
+  } catch(e) { console.error(e); }
+}
+
+function renderCalendar(json, year, month, since, until) {
+  const { day: limitDay } = loadLimits();
+  const byDay = {};
+  json.data.forEach(r => { byDay[r.day] = r; });
+
+  // Remove old day cells (keep the 7 header cells)
+  const grid = document.getElementById('cal-grid');
+  const cells = grid.querySelectorAll('.cal-cell');
+  cells.forEach(c => c.remove());
+
+  // Day of week for first of month: Mon=0 ... Sun=6
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  // Empty leading cells
+  for (let i = 0; i < firstDow; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell empty';
+    grid.appendChild(cell);
+  }
+
+  let sumPow = 0, sumN = 0, maxDb = -Infinity;
+  let daysWithData = 0, overCount = 0;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const r = byDay[dayStr];
+    const cell = document.createElement('div');
+
+    const dayDiv = document.createElement('div');
+    dayDiv.className = 'cal-day';
+    dayDiv.textContent = d;
+    cell.appendChild(dayDiv);
+
+    if (r && r.l_tag != null) {
+      daysWithData++;
+      const db = r.l_tag;
+      const delta = db - limitDay;
+
+      if (delta > 3)       cell.className = 'cal-cell over';
+      else if (delta > 0)  cell.className = 'cal-cell warn';
+      else                 cell.className = 'cal-cell ok';
+      if (delta > 0) overCount++;
+
+      const dbDiv = document.createElement('div');
+      dbDiv.className = 'cal-db';
+      dbDiv.textContent = db.toFixed(1);
+      cell.appendChild(dbDiv);
+
+      const subDiv = document.createElement('div');
+      subDiv.className = 'cal-sub';
+      subDiv.textContent = 'dB(A) Tag';
+      cell.appendChild(subDiv);
+
+      sumPow += 10 ** (db / 10);
+      sumN++;
+      if (db > maxDb) maxDb = db;
+    } else {
+      cell.className = 'cal-cell nodata';
+      const dbDiv = document.createElement('div');
+      dbDiv.className = 'cal-db';
+      dbDiv.textContent = '–';
+      cell.appendChild(dbDiv);
+    }
+
+    grid.appendChild(cell);
+  }
+
+  const monthLeq = sumN > 0 ? 10 * Math.log10(sumPow / sumN) : null;
+  const fmtDb = v => v != null && isFinite(v) ? v.toFixed(1) + ' dB' : '–';
+
+  document.getElementById('s-days').textContent = daysWithData;
+  document.getElementById('s-over').textContent = overCount > 0 ? overCount : '0';
+  document.getElementById('s-leq').textContent  = fmtDb(monthLeq);
+  document.getElementById('s-max').textContent  = maxDb > -Infinity ? maxDb.toFixed(1) + ' dB' : '–';
+}
+
+document.addEventListener('DOMContentLoaded', loadMonth);
+</script>
+</body>
+</html>

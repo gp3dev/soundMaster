@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoundMaster · Tagesganglinie</title>
+  <script src="/theme-init.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/nav.css">
+  <script src="/nav.js" defer></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px;
+      min-height: 100vh; padding: 16px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    header { display: flex; align-items: center; gap: 12px; }
+    h1 { font-size: 18px; font-weight: 600; letter-spacing: .5px; }
+
+    .ctrl-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .btn-group { display: flex; gap: 4px; }
+    .btn {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 6px 12px; border-radius: 4px;
+      cursor: pointer; font-size: 13px; font-family: inherit;
+    }
+    .btn:hover { background: var(--nav-hover); }
+    .btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+    input[type=date] {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 6px 8px; border-radius: 4px;
+      font-size: 13px; font-family: inherit;
+    }
+    .chart-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 14px; flex: 1; min-height: 300px; position: relative;
+    }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    @media (max-width: 600px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+    .stat {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 14px;
+    }
+    .stat-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+    .stat-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 3px; }
+    .info { font-size: 12px; color: var(--muted); text-align: center; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="nav-wrap">
+    <button class="burger" onclick="navToggle()" aria-label="Menü">
+      <svg width="18" height="14" viewBox="0 0 18 14" fill="none">
+        <rect y="0"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="6"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="12" width="18" height="2" rx="1" fill="currentColor"/>
+      </svg>
+    </button>
+    <div class="nav-menu" id="nav-menu">
+      <a href="/"         class="nav-item">📊 Verlauf</a>
+      <a href="/live"     class="nav-item">📡 Live</a>
+      <a href="/profile"  class="nav-item active">📈 Tagesganglinie</a>
+      <a href="/calendar" class="nav-item">📅 Kalender</a>
+      <a href="/daily"    class="nav-item">📋 Tages-Pegel</a>
+      <a href="/export"   class="nav-item">💾 Export</a>
+      <a href="/settings" class="nav-item">⚙️ Einstellungen</a>
+      <a href="/docs"     class="nav-item" target="_blank">📖 API Docs</a>
+    </div>
+  </div>
+  <h1>Tagesganglinie</h1>
+  <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
+</header>
+
+<div class="ctrl-bar">
+  <div class="btn-group">
+    <button class="btn active" id="btn7"  onclick="setDays(7,  this)">7 Tage</button>
+    <button class="btn"        id="btn30" onclick="setDays(30, this)">30 Tage</button>
+    <button class="btn"        id="btn90" onclick="setDays(90, this)">90 Tage</button>
+  </div>
+  <input type="date" id="inp-since" onchange="clearPreset()">
+  <input type="date" id="inp-until" onchange="clearPreset()">
+  <button class="btn" onclick="loadData()">Laden</button>
+</div>
+
+<div class="chart-wrap">
+  <canvas id="chart"></canvas>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-lbl">Lauteste Stunde</div>
+    <div class="stat-val" id="s-peak" style="color:var(--red)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Leiseste Stunde</div>
+    <div class="stat-val" id="s-quiet" style="color:var(--green)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">LAeq Tag (6–22 h)</div>
+    <div class="stat-val" id="s-day" style="color:var(--blue)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">LAeq Nacht (22–6 h)</div>
+    <div class="stat-val" id="s-night" style="color:var(--muted)">–</div>
+  </div>
+</div>
+
+<div class="info" id="info">Zeitraum wählen und laden</div>
+
+<script>
+'use strict';
+
+let chart = null;
+let profileByHour = {};
+
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+window.addEventListener('themechange', () => { if (chart) chart.update('none'); });
+
+function loadLimits() {
+  return {
+    day:   parseFloat(localStorage.getItem('sm_limit_day')   ?? 60),
+    night: parseFloat(localStorage.getItem('sm_limit_night') ?? 45),
+  };
+}
+
+function setDays(n, btn) {
+  document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const until = new Date();
+  const since = new Date(+until - n * 86400_000);
+  document.getElementById('inp-since').value = since.toISOString().slice(0, 10);
+  document.getElementById('inp-until').value = until.toISOString().slice(0, 10);
+  loadData();
+}
+
+function clearPreset() {
+  document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
+}
+
+const limitPlugin = {
+  id: 'limitLines',
+  afterDraw(ch) {
+    const { ctx, chartArea, scales } = ch;
+    if (!chartArea) return;
+    const { day, night } = loadLimits();
+    [[day, '#ffc107', `Tag ${day} dB(A)`], [night, '#4fc3f7', `Nacht ${night} dB(A)`]]
+      .forEach(([val, color, label]) => {
+        const y = scales.y.getPixelForValue(val);
+        if (y < chartArea.top || y > chartArea.bottom) return;
+        ctx.save();
+        ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.setLineDash([6, 4]);
+        ctx.moveTo(chartArea.left, y); ctx.lineTo(chartArea.right, y); ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.font = '11px Segoe UI,system-ui,sans-serif';
+        ctx.fillText(label, chartArea.left + 6, y - 4);
+        ctx.restore();
+      });
+  }
+};
+
+function initChart() {
+  const ctx = document.getElementById('chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: Array.from({length: 24}, (_, i) => i),
+      datasets: [{
+        label: 'LAeq',
+        data: Array(24).fill(null),
+        backgroundColor: ctx2 => {
+          const h = ctx2.dataIndex ?? 0;
+          return (h >= 6 && h < 22) ? 'rgba(1,120,212,0.72)' : 'rgba(79,110,180,0.55)';
+        },
+        borderWidth: 0,
+        borderRadius: 3,
+      }]
+    },
+    plugins: [limitPlugin],
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#111', borderColor: '#333', borderWidth: 1, padding: 8,
+          callbacks: {
+            title(items) {
+              const h = items[0].dataIndex;
+              return `${String(h).padStart(2,'0')}:00 – ${String(h).padStart(2,'0')}:59 Uhr`;
+            },
+            label(item) {
+              const r = profileByHour[item.dataIndex];
+              if (!r) return null;
+              return [
+                `  LAeq: ${r.leq_db.toFixed(1)} dB(A)`,
+                `  Min:  ${r.min_db.toFixed(1)} dB(A)`,
+                `  Max:  ${r.max_db.toFixed(1)} dB(A)`,
+                `  Messungen: ${r.count.toLocaleString('de-DE')}`,
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: () => cssVar('--chart-grid') },
+          ticks: { color: () => cssVar('--chart-ticks'), callback: v => v + ' h' }
+        },
+        y: {
+          grid: { color: () => cssVar('--chart-grid') },
+          ticks: { color: () => cssVar('--chart-ticks'), callback: v => v + ' dB' }
+        }
+      }
+    }
+  });
+}
+
+async function loadData() {
+  const since = document.getElementById('inp-since').value;
+  const until = document.getElementById('inp-until').value;
+  if (!since || !until) return;
+  try {
+    const resp = await fetch(`/stats/hourly-profile?since=${since}T00:00:00&until=${until}T23:59:59`);
+    if (!resp.ok) return;
+    renderChart(await resp.json(), since, until);
+  } catch(e) { console.error(e); }
+}
+
+function energyAvg(vals) {
+  const v = vals.filter(x => x != null);
+  if (!v.length) return null;
+  return 10 * Math.log10(v.reduce((s, x) => s + 10 ** (x / 10), 0) / v.length);
+}
+
+function renderChart(json, since, until) {
+  profileByHour = {};
+  json.data.forEach(r => { profileByHour[r.hour] = r; });
+
+  let totalCount = 0;
+  const leqArr = Array.from({length: 24}, (_, h) => {
+    const r = profileByHour[h];
+    if (r) totalCount += r.count;
+    return r ? r.leq_db : null;
+  });
+
+  chart.data.datasets[0].data = leqArr;
+
+  const dayLeq   = energyAvg(leqArr.slice(6, 22));
+  const nightLeq = energyAvg([...leqArr.slice(0, 6), ...leqArr.slice(22)]);
+
+  const valid = leqArr.map((v, h) => ({h, v})).filter(x => x.v != null);
+  const peak  = valid.reduce((a, b) => b.v > a.v ? b : a, {h: -1, v: -Infinity});
+  const quiet = valid.reduce((a, b) => b.v < a.v ? b : a, {h: -1, v:  Infinity});
+
+  const fmtDb = v => v != null ? v.toFixed(1) + ' dB' : '–';
+  document.getElementById('s-peak').textContent  = peak.h  >= 0 ? `${peak.v.toFixed(1)} dB (${peak.h}h)`  : '–';
+  document.getElementById('s-quiet').textContent = quiet.h >= 0 ? `${quiet.v.toFixed(1)} dB (${quiet.h}h)` : '–';
+  document.getElementById('s-day').textContent   = fmtDb(dayLeq);
+  document.getElementById('s-night').textContent = fmtDb(nightLeq);
+  document.getElementById('info').textContent =
+    `${since} bis ${until} · ${totalCount.toLocaleString('de-DE')} Messungen`;
+
+  const allVals = leqArr.filter(x => x != null);
+  if (allVals.length) {
+    const { day, night } = loadLimits();
+    chart.options.scales.y.min = Math.max(0, Math.floor(Math.min(...allVals, night) - 3));
+    chart.options.scales.y.max = Math.ceil(Math.max(...allVals, day) + 3);
+  }
+  chart.update('none');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initChart();
+  setDays(7, document.getElementById('btn7'));
+});
+</script>
+</body>
+</html>

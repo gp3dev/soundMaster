@@ -1,3 +1,5 @@
+import csv
+import io
 import os
 import threading
 import time
@@ -6,7 +8,7 @@ from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 import db as database
@@ -28,6 +30,25 @@ def set_connection_state(connected: bool, error: str = "") -> None:
 
 def _ts_to_iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_time_range(
+    since: Optional[str],
+    until: Optional[str],
+    days: Optional[int],
+    default_days: int = 30,
+) -> tuple[float, float]:
+    now = time.time()
+    if days is not None:
+        return now - days * 86400, now
+    if since is None and until is None:
+        return now - default_days * 86400, now
+    try:
+        ts_since = datetime.fromisoformat(since).timestamp() if since else now - default_days * 86400
+        ts_until = datetime.fromisoformat(until).timestamp() if until else now
+        return ts_since, ts_until
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid timestamp: {e}")
 
 
 def _measurement_to_dict(m) -> dict:
@@ -52,6 +73,31 @@ def web_live():
 @app.get("/settings", include_in_schema=False)
 def web_settings():
     return FileResponse(os.path.join(_WEB_DIR, "settings.html"))
+
+
+@app.get("/profile", include_in_schema=False)
+def web_profile():
+    return FileResponse(os.path.join(_WEB_DIR, "profile.html"))
+
+
+@app.get("/calendar", include_in_schema=False)
+def web_calendar():
+    return FileResponse(os.path.join(_WEB_DIR, "calendar.html"))
+
+
+@app.get("/daily", include_in_schema=False)
+def web_daily():
+    return FileResponse(os.path.join(_WEB_DIR, "daily.html"))
+
+
+@app.get("/export", include_in_schema=False)
+def web_export_page():
+    return FileResponse(os.path.join(_WEB_DIR, "export.html"))
+
+
+@app.get("/report", include_in_schema=False)
+def web_report():
+    return FileResponse(os.path.join(_WEB_DIR, "report-print.html"))
 
 
 @app.get("/health")
@@ -138,6 +184,64 @@ def history_aggregate(
         "bucket_seconds": round(bucket_seconds, 1),
         "data": [{"ts": _ts_to_iso(r["ts_unix"]), **r} for r in rows],
     }
+
+
+@app.get("/stats/daily")
+def stats_daily(
+    since: Optional[str] = Query(None, description="ISO 8601 start"),
+    until: Optional[str] = Query(None, description="ISO 8601 end"),
+    days:  Optional[int] = Query(None, ge=1, le=365, description="Last N days"),
+):
+    """Per-day L_Tag, L_Nacht and L_DEN (16. BImSchV / EU 2002/49/EG)."""
+    ts_since, ts_until = _parse_time_range(since, until, days, default_days=30)
+    rows = database.query_daily_levels(ts_since, ts_until)
+    return {"count": len(rows), "since": _ts_to_iso(ts_since), "until": _ts_to_iso(ts_until), "data": rows}
+
+
+@app.get("/stats/hourly-profile")
+def stats_hourly_profile(
+    since: Optional[str] = Query(None, description="ISO 8601 start"),
+    until: Optional[str] = Query(None, description="ISO 8601 end"),
+    days:  Optional[int] = Query(None, ge=1, le=365, description="Last N days"),
+):
+    """Energy-averaged LAeq per hour-of-day across all days in range."""
+    if since is None and until is None and days is None:
+        days = 7
+    ts_since, ts_until = _parse_time_range(since, until, days)
+    rows = database.query_hourly_profile(ts_since, ts_until)
+    return {"count": len(rows), "since": _ts_to_iso(ts_since), "until": _ts_to_iso(ts_until), "data": rows}
+
+
+@app.get("/export/csv")
+def export_csv(
+    since: Optional[str] = Query(None, description="ISO 8601 start"),
+    until: Optional[str] = Query(None, description="ISO 8601 end"),
+    days:  Optional[int] = Query(None, ge=1, le=3650, description="Last N days"),
+):
+    """Download all raw measurements in the given range as CSV."""
+    ts_since, ts_until = _parse_time_range(since, until, days, default_days=7)
+    cursor = database.query_raw_export(ts_since, ts_until)
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["timestamp_iso", "timestamp_unix", "level_db_A", "weighting", "response"])
+    for row in cursor:
+        w.writerow([
+            _ts_to_iso(row[0]),
+            f"{row[0]:.3f}",
+            f"{row[1]:.1f}",
+            row[2] or "A",
+            row[3] or "SLOW",
+        ])
+
+    from_str = datetime.fromtimestamp(ts_since).strftime("%Y%m%d")
+    to_str   = datetime.fromtimestamp(ts_until).strftime("%Y%m%d")
+    filename = f"laerm_a6_{from_str}_{to_str}.csv"
+    return Response(
+        content=buf.getvalue().encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 app.mount("/", StaticFiles(directory=_WEB_DIR, html=True), name="web")
