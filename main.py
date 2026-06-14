@@ -11,6 +11,7 @@ Verwendung:
   python main.py --api-port 8080         # API-Port ändern
 """
 
+import getpass
 import queue
 import signal
 import sys
@@ -63,6 +64,25 @@ if __name__ == "__main__":
     # ── Probe mode ─────────────────────────────────────────────────────────
     if cfg.probe:
         probe(cfg.serial.port)
+        sys.exit(0)
+
+    # ── Reset-Password-Modus ───────────────────────────────────────────────
+    if cfg.reset_password:
+        database.init(cfg.db_path)
+        try:
+            pw1 = getpass.getpass("Neues Passwort: ")
+            pw2 = getpass.getpass("Passwort bestätigen: ")
+        except KeyboardInterrupt:
+            print("\nAbgebrochen.")
+            sys.exit(0)
+        if pw1 != pw2:
+            print("Fehler: Passwörter stimmen nicht überein.")
+            sys.exit(1)
+        if not pw1:
+            print("Fehler: Passwort darf nicht leer sein.")
+            sys.exit(1)
+        database.auth_set("password_hash", auth.hash_password(pw1))
+        print("Passwort erfolgreich gesetzt.")
         sys.exit(0)
 
     # ── Port-Erkennung ─────────────────────────────────────────────────────

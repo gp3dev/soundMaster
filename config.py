@@ -31,6 +31,7 @@ class AppConfig:
     probe: bool = False
     diag: bool = False
     no_tui: bool = False
+    reset_password: bool = False
 
     @property
     def db_path(self) -> Path:
@@ -48,6 +49,7 @@ def load(argv=None) -> AppConfig:
     parser.add_argument("--probe", action="store_true", help="Probe serial port and dump raw bytes")
     parser.add_argument("--diag", action="store_true", help="Diagnosemodus: Rohdaten + DB-Schreiben ohne TUI")
     parser.add_argument("--no-tui", action="store_true", help="Run without TUI (API + logging only)")
+    parser.add_argument("--reset-password", action="store_true", help="Admin-Passwort zurücksetzen")
     args = parser.parse_args(argv)
 
     cfg = AppConfig()
@@ -82,5 +84,6 @@ def load(argv=None) -> AppConfig:
     cfg.probe = args.probe
     cfg.diag = args.diag
     cfg.no_tui = args.no_tui
+    cfg.reset_password = args.reset_password
 
     return cfg
