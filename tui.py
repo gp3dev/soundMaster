@@ -22,7 +22,8 @@ from collections import deque
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.reactive import reactive
-from textual.widgets import Footer, Header, Label, Static
+from textual.widgets import Footer, Header, Label, Static, Digits
+from textual.widget import Widget
 from textual.containers import Vertical, Horizontal
 from textual_plotext import PlotextPlot
 
@@ -33,11 +34,11 @@ HISTORY_SECONDS = 60
 UPDATE_INTERVAL = 1.0
 
 
-class ValueDisplay(Static):
-    level = reactive("--.- dB")
-
-    def render(self) -> str:
-        return self.level
+class ValueDisplay(Widget):
+    def compose(self) -> ComposeResult:
+        with Horizontal(id="value-inner"):
+            yield Digits("--.-", id="value-digits")
+            yield Label("dB", id="value-unit")
 
 
 class StatusBar(Static):
@@ -89,12 +90,31 @@ class SoundMasterApp(App):
         background: $surface;
     }
     #value-display {
-        height: 5;
-        content-align: center middle;
-        text-style: bold;
-        color: $success;
+        height: 9;
+        align: center middle;
         border: solid $primary;
         margin: 0 1;
+    }
+    #value-inner {
+        width: auto;
+        height: auto;
+    }
+    #value-digits {
+        width: auto;
+        color: $success;
+        text-style: bold;
+    }
+    #value-digits.warning {
+        color: $error;
+    }
+    #value-unit {
+        color: $success;
+        text-style: bold;
+        padding-top: 2;
+        padding-left: 1;
+    }
+    #value-unit.warning {
+        color: $error;
     }
     #status-bar {
         height: 1;
@@ -165,9 +185,14 @@ class SoundMasterApp(App):
 
         paused_indicator = "  [PAUSE]" if self._paused else ""
 
+        digits_widget = value_widget.query_one("#value-digits", Digits)
+        unit_label = value_widget.query_one("#value-unit", Label)
+
         if not self._history:
             status_widget.status_text = f"● Warte auf Gerät (SENDING-Modus aktivieren?){paused_indicator}"
-            value_widget.level = "--.- dB"
+            digits_widget.update("--.-")
+            digits_widget.remove_class("warning")
+            unit_label.remove_class("warning")
             stats_widget.stats_text = "Min: --.-  Max: --.-  Avg: --.-"
             graph_widget.update_data([], [])
             return
@@ -182,10 +207,14 @@ class SoundMasterApp(App):
             f"{over}{under}{paused_indicator}"
         )
 
-        color_class = "bold green"
-        if latest.overflow or latest.underflow:
-            color_class = "bold red"
-        value_widget.level = f"{latest.level_db:.1f} dB"
+        warning = latest.overflow or latest.underflow
+        digits_widget.update(f"{latest.level_db:.1f}")
+        if warning:
+            digits_widget.add_class("warning")
+            unit_label.add_class("warning")
+        else:
+            digits_widget.remove_class("warning")
+            unit_label.remove_class("warning")
 
         times = [m.ts for m in self._history]
         values = [m.level_db for m in self._history]
