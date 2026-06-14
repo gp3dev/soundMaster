@@ -7,16 +7,24 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import auth as _auth
 import db as database
 
 _WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 
 app = FastAPI(title="SoundMaster API", version="1.0")
+
+_COOKIE = "sm_session"
+
+
+def _require_auth(sm_session: Optional[str] = Cookie(None)) -> None:
+    if not _auth.validate_session(sm_session):
+        raise HTTPException(status_code=401, detail="Nicht authentifiziert")
 
 # Shared connection state set by main
 _connected: bool = False
@@ -69,6 +77,11 @@ def _measurement_to_dict(m) -> dict:
 @app.get("/live", include_in_schema=False)
 def web_live():
     return FileResponse(os.path.join(_WEB_DIR, "live.html"))
+
+
+@app.get("/login", include_in_schema=False)
+def web_login_page():
+    return FileResponse(os.path.join(_WEB_DIR, "login.html"))
 
 
 @app.get("/settings", include_in_schema=False)
@@ -250,6 +263,40 @@ def export_csv(
     )
 
 
+class _LoginIn(BaseModel):
+    password: str
+
+
+@app.get("/auth/status")
+def auth_status(sm_session: Optional[str] = Cookie(None)):
+    return {
+        "authenticated": _auth.validate_session(sm_session),
+        "configured":    _auth.is_configured(),
+    }
+
+
+@app.post("/auth/login")
+def auth_login(body: _LoginIn, response: Response):
+    if not _auth.is_configured():
+        raise HTTPException(status_code=503, detail="Kein Admin-Passwort konfiguriert")
+    if not _auth.verify_password(body.password):
+        raise HTTPException(status_code=401, detail="Falsches Passwort")
+    token = _auth.create_session()
+    response.set_cookie(
+        _COOKIE, token,
+        httponly=True, samesite="strict", max_age=8 * 3600,
+    )
+    return {"ok": True}
+
+
+@app.post("/auth/logout")
+def auth_logout(response: Response, sm_session: Optional[str] = Cookie(None)):
+    if sm_session:
+        _auth.destroy_session(sm_session)
+    response.delete_cookie(_COOKIE)
+    return {"ok": True}
+
+
 class SettingsIn(BaseModel):
     valid_from: Optional[str] = None     # ISO 8601; default = now
     location_name: Optional[str] = None
@@ -299,7 +346,7 @@ def api_settings_history():
     return {"count": len(rows), "data": [_settings_to_dict(s) for s in rows]}
 
 
-@app.post("/api/settings", status_code=201)
+@app.post("/api/settings", status_code=201, dependencies=[Depends(_require_auth)])
 def api_settings_post(body: SettingsIn):
     """Create a new settings period."""
     now = time.time()
@@ -326,7 +373,7 @@ def api_settings_post(body: SettingsIn):
     return _settings_to_dict(saved)
 
 
-@app.delete("/api/settings/{id}", status_code=204)
+@app.delete("/api/settings/{id}", status_code=204, dependencies=[Depends(_require_auth)])
 def api_settings_delete(id: int):
     """Delete a settings record by id."""
     if not database.settings_delete(id):

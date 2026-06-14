@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoundMaster · Anmelden</title>
+  <script src="/theme-init.js"></script>
+  <link rel="stylesheet" href="/nav.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 32px 28px;
+      width: 100%;
+      max-width: 340px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .login-card h1 {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      text-align: center;
+    }
+    .login-card p.sub {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: -12px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .field label { font-size: 12px; color: var(--muted); }
+    input[type=password] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: inherit;
+      width: 100%;
+    }
+    input[type=password]:focus { outline: 1px solid var(--blue); }
+    .btn {
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      padding: 9px 18px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      width: 100%;
+      transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .error-msg {
+      font-size: 12px;
+      color: #e53935;
+      text-align: center;
+      min-height: 16px;
+    }
+  </style>
+</head>
+<body>
+<div class="login-card">
+  <h1>SoundMaster</h1>
+  <p class="sub">Admin-Bereich · Einstellungen</p>
+
+  <div class="field">
+    <label for="inp-pw">Passwort</label>
+    <input type="password" id="inp-pw" autofocus autocomplete="current-password"
+           onkeydown="if(event.key==='Enter') login()">
+  </div>
+
+  <p class="error-msg" id="err"></p>
+
+  <button class="btn" id="btn-login" onclick="login()">Anmelden</button>
+</div>
+
+<script>
+'use strict';
+
+async function login() {
+  const pw  = document.getElementById('inp-pw').value;
+  const err = document.getElementById('err');
+  const btn = document.getElementById('btn-login');
+  if (!pw) return;
+
+  btn.disabled = true;
+  err.textContent = '';
+
+  try {
+    const res = await fetch('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    });
+
+    if (res.ok) {
+      const next = new URLSearchParams(location.search).get('next') || '/settings';
+      location.replace(next);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      err.textContent = data.detail || 'Anmeldung fehlgeschlagen.';
+      btn.disabled = false;
+      document.getElementById('inp-pw').select();
+    }
+  } catch (_) {
+    err.textContent = 'Verbindungsfehler.';
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>

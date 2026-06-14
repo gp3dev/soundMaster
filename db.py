@@ -93,6 +93,11 @@ def init(path: Path) -> None:
             comment       TEXT
         );
         CREATE INDEX IF NOT EXISTS settings_valid_from ON settings(valid_from);
+
+        CREATE TABLE IF NOT EXISTS auth (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
     """)
     c.commit()
 
@@ -272,6 +277,17 @@ def query_raw_export(since: float, until: float):
         "WHERE ts BETWEEN ? AND ? ORDER BY ts",
         (since, until),
     )
+
+
+def auth_get(key: str) -> Optional[str]:
+    row = _conn().execute("SELECT value FROM auth WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def auth_set(key: str, value: str) -> None:
+    c = _conn()
+    c.execute("INSERT OR REPLACE INTO auth (key, value) VALUES (?, ?)", (key, value))
+    c.commit()
 
 
 def settings_get(ts: Optional[float] = None) -> Optional[Settings]:

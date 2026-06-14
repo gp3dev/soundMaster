@@ -213,7 +213,10 @@
     </div>
   </div>
   <h1>Einstellungen</h1>
-  <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
+  <div style="display:flex;gap:8px;margin-left:auto">
+    <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
+    <button class="theme-btn" onclick="logout()" aria-label="Abmelden" title="Abmelden">⏻</button>
+  </div>
 </header>
 
 <div class="card">
@@ -328,6 +331,18 @@ const ZONES = {
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Auth-Prüfung: nicht-authentifizierte Benutzer zur Login-Seite schicken
+  try {
+    const st = await fetch('/auth/status').then(r => r.json());
+    if (!st.authenticated) {
+      location.replace('/login?next=/settings');
+      return;
+    }
+  } catch (_) {
+    location.replace('/login?next=/settings');
+    return;
+  }
+
   document.getElementById('inp-day').addEventListener('input', updatePreview);
   document.getElementById('inp-night').addEventListener('input', updatePreview);
 
@@ -492,6 +507,11 @@ async function loadHistory() {
   } catch (_) {
     wrap.innerHTML = '<span class="empty-hint">Verlauf konnte nicht geladen werden.</span>';
   }
+}
+
+async function logout() {
+  await fetch('/auth/logout', { method: 'POST' }).catch(() => {});
+  location.replace('/login');
 }
 
 function esc(str) {

@@ -19,6 +19,7 @@ import time
 
 import config
 import db as database
+import auth
 from reader import SerialReader, probe, resolve_port
 from api import ApiServer, set_connection_state
 
@@ -75,6 +76,20 @@ if __name__ == "__main__":
 
     # ── Normal mode ────────────────────────────────────────────────────────
     database.init(cfg.db_path)
+
+    # ── Auth setup ─────────────────────────────────────────────────────────
+    stored_hash = database.auth_get("password_hash")
+    if stored_hash is None:
+        import secrets as _sec
+        import string as _str
+        _alphabet = _str.ascii_letters + _str.digits
+        _password = "".join(_sec.choice(_alphabet) for _ in range(16))
+        stored_hash = auth.hash_password(_password)
+        database.auth_set("password_hash", stored_hash)
+        print(f"\n{'=' * 60}")
+        print(f"  Admin-Passwort (nur einmalig angezeigt): {_password}")
+        print(f"{'=' * 60}\n")
+    auth.init(stored_hash)
 
     # Shared queue: reader → (tui_display + db_writer)
     # We use two separate queues so the TUI gets its own copy
