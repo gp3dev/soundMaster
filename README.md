@@ -12,6 +12,9 @@ Langzeit-Datenerfassung für den **Laserliner SoundTest-Master (082.070A)** Scha
 - **REST-API** (FastAPI + uvicorn) mit aktuellen Werten, Verlauf und Statistiken
 - **TUI** (Textual) mit Live-Graph und Statusanzeige
 - **Web-Dashboard** (`http://localhost:8080`) mit Echtzeit-Diagramm, LAeq-Verlaufschart (min/max-Band) und Light/Dark-Mode-Umschalter
+- **Einstellungen in der Datenbank** — Messtellen-Koordinaten, TA-Lärm-Grenzwerte und Zonentyp werden server-seitig gespeichert und stehen allen Clients zur Verfügung
+- **Zeitraum-Historie der Einstellungen** — jede Konfigurationsänderung wird mit Zeitstempel protokolliert, sodass historische Auswertungen die jeweils gültigen Grenzwerte verwenden
+- **Admin-Login** — Schreibzugriffe (Einstellungen ändern/löschen) erfordern Authentifizierung; Lesezugriffe (Charts, Messwerte, Karte) bleiben öffentlich
 
 ## Voraussetzungen
 
@@ -63,9 +66,34 @@ Nach aktiviertem venv (oder nach `./start.sh` für den Einmalstart):
 # Diagnosemodus: Rohdaten dekodieren + in DB schreiben, ohne TUI/API
 .venv/bin/python main.py --diag
 
+# Admin-Passwort zurücksetzen
+.venv/bin/python main.py --reset-password
+
 # Weitere Optionen
 .venv/bin/python main.py --baud 2400 --api-port 8080
 ```
+
+## Admin-Passwort
+
+Beim **ersten Start** wird automatisch ein zufälliges 16-stelliges Passwort generiert und einmalig im Terminal angezeigt:
+
+```
+============================================================
+  Admin-Passwort (nur einmalig angezeigt): xY7mK2pQrL8nWv3A
+============================================================
+```
+
+Das Passwort wird als PBKDF2-SHA256-Hash in der Datenbank gespeichert und nie im Klartext persistiert.
+
+Mit dem Passwort können Einstellungen über `/settings` geändert werden. Alle anderen Seiten (Charts, Messwerte, Karte) sind ohne Login zugänglich.
+
+### Passwort zurücksetzen
+
+```bash
+.venv/bin/python main.py --reset-password
+```
+
+Fragt interaktiv nach einem neuen Passwort (mit Bestätigung). Der Server muss anschließend neu gestartet werden.
 
 ## Konfiguration
 
@@ -85,7 +113,13 @@ host = "0.0.0.0"
 port = 8080
 ```
 
+Messtellen-Einstellungen (Name, Koordinaten, TA-Lärm-Grenzwerte) werden über die Weboberfläche unter `/settings` verwaltet und in der Datenbank gespeichert.
+
 ## REST-API
+
+Lesende Endpunkte sind öffentlich zugänglich. Schreibende Endpunkte erfordern eine gültige Session (Cookie `sm_session`, gesetzt nach Login unter `/login`).
+
+### Messdaten (öffentlich)
 
 | Endpunkt | Beschreibung |
 |----------|-------------|
@@ -93,12 +127,45 @@ port = 8080
 | `GET /history?minutes=60` | Roher Verlauf (auch `since=`, `until=`, `limit=`) |
 | `GET /history/aggregate?minutes=60&buckets=200` | Aggregierter Verlauf: LAeq, min, max pro Zeitbucket |
 | `GET /stats?minutes=60` | Min/Max/Avg für Zeitfenster |
+| `GET /stats/daily` | L_Tag, L_Nacht, L_DEN pro Kalendertag (16. BImSchV / EU 2002/49/EG) |
+| `GET /stats/hourly-profile` | Energie-gemittelter LAeq pro Tagesstunde |
+| `GET /export/csv` | Rohmesswerte als CSV-Download |
 | `GET /health` | Verbindungsstatus des Sensors |
-| `GET /` | Web-Dashboard |
-| `GET /live` | Echtzeit-Seite |
-| `GET /settings` | Einstellungsseite (TA-Lärm-Grenzwerte) |
 
-Beispiel-Antwort `/current`:
+### Einstellungen
+
+| Endpunkt | Auth | Beschreibung |
+|----------|------|-------------|
+| `GET /api/settings` | — | Aktuelle Einstellungen (optional `?at=<ISO8601>` für historischen Stand) |
+| `GET /api/settings/history` | — | Alle Einstellungs-Perioden chronologisch |
+| `POST /api/settings` | ✓ | Neue Einstellungs-Periode anlegen |
+| `DELETE /api/settings/{id}` | ✓ | Einstellungs-Eintrag löschen |
+
+### Authentifizierung
+
+| Endpunkt | Beschreibung |
+|----------|-------------|
+| `GET /auth/status` | Session-Status (`{"authenticated": bool}`) |
+| `POST /auth/login` | Login (`{"password": "..."}`) — setzt Cookie `sm_session` |
+| `POST /auth/logout` | Logout — löscht Cookie |
+
+Beispiel-Antwort `GET /api/settings`:
+
+```json
+{
+  "id": 3,
+  "valid_from": "2026-06-01T00:00:00Z",
+  "location_name": "A6 Dechendorf, Anwohnerpunkt",
+  "lat": 49.123456,
+  "lon": 10.654321,
+  "zone": "dorf",
+  "limit_day": 60.0,
+  "limit_night": 45.0,
+  "comment": null
+}
+```
+
+Beispiel-Antwort `GET /current`:
 
 ```json
 {
@@ -140,14 +207,22 @@ Sync-Strategie: Suche den 6-Byte-Anker ab Offset 6, gehe 6 Bytes zurück für de
 main.py              Einstiegspunkt, Thread-Orchestrierung
 reader.py            Serieller Empfang & Protokoll-Dekodierung
 api.py               FastAPI REST-API & statische Web-Dateien
-db.py                SQLite-Datenbank (Lesen/Schreiben/Statistiken)
+db.py                SQLite-Datenbank (Lesen/Schreiben/Statistiken/Einstellungen)
+auth.py              Passwort-Hashing (PBKDF2-SHA256) & Session-Verwaltung
 config.py            Konfigurationsladung (TOML + CLI-Argumente)
 tui.py               Textual-TUI mit Live-Graph
 diag.py              Diagnosemodus (--diag): Rohdaten + DB ohne TUI/API
 web/
   index.html         Web-Dashboard (LAeq-Verlaufsdiagramm)
   live.html          Echtzeit-Ansicht
-  settings.html      Einstellungsseite (TA-Lärm-Grenzwerte)
+  settings.html      Einstellungsseite (Login erforderlich)
+  login.html         Admin-Login
+  profile.html       Tagesganglinie (Stundenprofil)
+  calendar.html      Kalender-Übersicht
+  daily.html         Tages-Pegel (L_Tag / L_Nacht / L_DEN)
+  export.html        CSV-Export
+  map.html           Interaktive Karte (Leaflet)
+  report-print.html  Druckbarer Messbericht
   nav.css / nav.js   Navigation & Theme-Umschalter
   theme-init.js      Theme-Vorladung (verhindert Flash beim Laden)
 config.toml          Standardkonfiguration
