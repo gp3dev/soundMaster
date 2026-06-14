@@ -54,20 +54,25 @@
     .cal-db  { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
     .cal-sub { font-size: 10px; color: var(--muted); }
 
-    /* Color coding by exceedance vs day limit */
+    /* Tag-Zeile */
     .cal-cell.ok     { background: rgba(46,125,50,  0.08); }
     .cal-cell.warn   { background: rgba(255,193,7,  0.12); }
     .cal-cell.over   { background: rgba(229,57,53,  0.12); }
-    .cal-cell.over   .cal-db { color: var(--red); }
-    .cal-cell.warn   .cal-db { color: var(--yellow); }
     .cal-cell.ok     .cal-db { color: var(--green); }
+    .cal-cell.warn   .cal-db { color: var(--yellow); }
+    .cal-cell.over   .cal-db { color: var(--red); }
     .cal-cell.nodata .cal-db { color: var(--muted); }
 
-    .cal-night     { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .cal-night.ok  { color: #4fc3f7; }
-    .cal-night.warn{ color: var(--yellow); }
-    .cal-night.over{ color: var(--red); }
-    .cal-night.nd  { color: var(--muted); }
+    /* Nacht-Zeile */
+    .cal-cell.night              { border-top: none; background: rgba(79,195,247,.04); }
+    .cal-cell.night.ok           { background: rgba(79,195,247,.08); }
+    .cal-cell.night.warn         { background: rgba(255,193,7, .12); }
+    .cal-cell.night.over         { background: rgba(229,57,53, .12); }
+    .cal-cell.night.ok   .cal-db { color: #4fc3f7; }
+    .cal-cell.night.warn .cal-db { color: var(--yellow); }
+    .cal-cell.night.over .cal-db { color: var(--red); }
+    .cal-cell.night.nodata .cal-db { color: var(--muted); }
+    .cal-cell.night.empty        { background: var(--bg); }
 
     .legend {
       display: flex; gap: 16px; padding: 10px 14px;
@@ -138,10 +143,12 @@
   </div>
   <div class="legend">
     <div class="legend-item"><div class="legend-dot ld-ok"></div>Unter Grenzwert</div>
-    <div class="legend-item"><div class="legend-dot ld-warn"></div>Bis 3 dB über Grenzwert</div>
-    <div class="legend-item"><div class="legend-dot ld-over"></div>Über 3 dB über Grenzwert</div>
+    <div class="legend-item"><div class="legend-dot ld-warn"></div>Bis 3 dB darüber</div>
+    <div class="legend-item"><div class="legend-dot ld-over"></div>Mehr als 3 dB darüber</div>
     <div class="legend-item"><div class="legend-dot ld-none"></div>Keine Daten</div>
-    <div class="legend-item" style="margin-left:auto;color:var(--muted)">Hintergrund: Grenzwert Tag · Zahl unten: L_Nacht vs. Grenzwert Nacht</div>
+    <div class="legend-item" style="margin-left:auto;color:var(--muted)">
+      ☀️ Tag (L_Tag vs. Grenzwert Tag) &nbsp;·&nbsp; 🌙 Nacht (L_Nacht vs. Grenzwert Nacht)
+    </div>
   </div>
 </div>
 
@@ -207,90 +214,85 @@ async function loadMonth() {
   try {
     const resp = await fetch(`/stats/daily?since=${since}T00:00:00&until=${until}T23:59:59`);
     if (!resp.ok) return;
-    renderCalendar(await resp.json(), currentYear, currentMonth, since, until);
+    renderCalendar(await resp.json(), currentYear, currentMonth);
   } catch(e) { console.error(e); }
 }
 
-function renderCalendar(json, year, month, since, until) {
+function makeCell(classes, label, db, sub) {
+  const cell = document.createElement('div');
+  cell.className = 'cal-cell ' + classes;
+  const lbl = document.createElement('div');
+  lbl.className = 'cal-day';
+  lbl.textContent = label;
+  cell.appendChild(lbl);
+  const dbDiv = document.createElement('div');
+  dbDiv.className = 'cal-db';
+  dbDiv.textContent = db;
+  cell.appendChild(dbDiv);
+  if (sub) {
+    const subDiv = document.createElement('div');
+    subDiv.className = 'cal-sub';
+    subDiv.textContent = sub;
+    cell.appendChild(subDiv);
+  }
+  return cell;
+}
+
+function renderCalendar(json, year, month) {
   const { day: limitDay, night: limitNight } = loadLimits();
   const byDay = {};
   json.data.forEach(r => { byDay[r.day] = r; });
 
-  // Remove old day cells (keep the 7 header cells)
   const grid = document.getElementById('cal-grid');
   grid.querySelectorAll('.cal-cell').forEach(c => c.remove());
 
-  // Day of week for first of month: Mon=0 ... Sun=6
-  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7;
+  const pad = n => String(n).padStart(2, '0');
+  const firstDow   = (new Date(year, month, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // Empty leading cells
-  for (let i = 0; i < firstDow; i++) {
-    const cell = document.createElement('div');
-    cell.className = 'cal-cell empty';
-    grid.appendChild(cell);
+  // Build week arrays (null = empty padding slot)
+  const weeks = [];
+  let week = Array(firstDow).fill(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    week.push(d);
+    if (week.length === 7) { weeks.push(week); week = []; }
   }
+  while (week.length && week.length < 7) week.push(null);
+  if (week.length) weeks.push(week);
 
   let sumPow = 0, sumN = 0, maxDb = -Infinity;
   let daysWithData = 0, overCount = 0, overNightCount = 0;
 
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dayStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const r = byDay[dayStr];
-    const cell = document.createElement('div');
-
-    const dayDiv = document.createElement('div');
-    dayDiv.className = 'cal-day';
-    dayDiv.textContent = d;
-    cell.appendChild(dayDiv);
-
-    if (r && r.l_tag != null) {
-      daysWithData++;
-      const db = r.l_tag;
-      const delta = db - limitDay;
-
-      if (delta > 3)       cell.className = 'cal-cell over';
-      else if (delta > 0)  cell.className = 'cal-cell warn';
-      else                 cell.className = 'cal-cell ok';
-      if (delta > 0) overCount++;
-
-      const dbDiv = document.createElement('div');
-      dbDiv.className = 'cal-db';
-      dbDiv.textContent = db.toFixed(1);
-      cell.appendChild(dbDiv);
-
-      const subDiv = document.createElement('div');
-      subDiv.className = 'cal-sub';
-      subDiv.textContent = 'dB(A) Tag';
-      cell.appendChild(subDiv);
-
-      sumPow += 10 ** (db / 10);
-      sumN++;
-      if (db > maxDb) maxDb = db;
-    } else {
-      cell.className = 'cal-cell nodata';
-      const dbDiv = document.createElement('div');
-      dbDiv.className = 'cal-db';
-      dbDiv.textContent = '–';
-      cell.appendChild(dbDiv);
+  for (const wk of weeks) {
+    // ── Tag-Zeile ────────────────────────────────────────────
+    for (const d of wk) {
+      if (!d) { grid.appendChild(makeCell('empty', '', '', null)); continue; }
+      const r = byDay[`${year}-${pad(month+1)}-${pad(d)}`];
+      if (r && r.l_tag != null) {
+        daysWithData++;
+        const delta = r.l_tag - limitDay;
+        const cls = delta > 3 ? 'over' : delta > 0 ? 'warn' : 'ok';
+        if (delta > 0) overCount++;
+        grid.appendChild(makeCell(cls, '☀️ ' + d, r.l_tag.toFixed(1), 'dB(A) Tag'));
+        sumPow += 10 ** (r.l_tag / 10); sumN++;
+        if (r.l_tag > maxDb) maxDb = r.l_tag;
+      } else {
+        grid.appendChild(makeCell('nodata', d, '–', null));
+      }
     }
-
-    // Night value
-    const nightDiv = document.createElement('div');
-    if (r && r.l_nacht != null) {
-      const dn = r.l_nacht - limitNight;
-      if (dn > 3)       nightDiv.className = 'cal-night over';
-      else if (dn > 0)  nightDiv.className = 'cal-night warn';
-      else              nightDiv.className = 'cal-night ok';
-      nightDiv.textContent = r.l_nacht.toFixed(1) + ' N';
-      if (dn > 0) overNightCount++;
-    } else {
-      nightDiv.className = 'cal-night nd';
-      nightDiv.textContent = '– N';
+    // ── Nacht-Zeile ──────────────────────────────────────────
+    for (const d of wk) {
+      if (!d) { grid.appendChild(makeCell('night empty', '', '', null)); continue; }
+      const r = byDay[`${year}-${pad(month+1)}-${pad(d)}`];
+      if (r && r.l_nacht != null) {
+        const delta = r.l_nacht - limitNight;
+        const cls = delta > 3 ? 'over' : delta > 0 ? 'warn' : 'ok';
+        if (delta > 0) overNightCount++;
+        grid.appendChild(makeCell('night ' + cls, '🌙', r.l_nacht.toFixed(1), 'dB(A) Nacht'));
+      } else {
+        grid.appendChild(makeCell('night nodata', '🌙', '–', null));
+      }
     }
-    cell.appendChild(nightDiv);
-
-    grid.appendChild(cell);
   }
 
   const monthLeq = sumN > 0 ? 10 * Math.log10(sumPow / sumN) : null;
