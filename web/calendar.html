@@ -63,6 +63,12 @@
     .cal-cell.ok     .cal-db { color: var(--green); }
     .cal-cell.nodata .cal-db { color: var(--muted); }
 
+    .cal-night     { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .cal-night.ok  { color: #4fc3f7; }
+    .cal-night.warn{ color: var(--yellow); }
+    .cal-night.over{ color: var(--red); }
+    .cal-night.nd  { color: var(--muted); }
+
     .legend {
       display: flex; gap: 16px; padding: 10px 14px;
       font-size: 12px; color: var(--muted); flex-wrap: wrap;
@@ -77,8 +83,8 @@
     .ld-over { background: rgba(229,57,53,  0.3); }
     .ld-none { background: var(--bg); }
 
-    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-    @media (max-width: 600px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+    .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+    @media (max-width: 700px) { .stats { grid-template-columns: repeat(2, 1fr); } }
     .stat {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 6px; padding: 10px 14px;
@@ -135,7 +141,7 @@
     <div class="legend-item"><div class="legend-dot ld-warn"></div>Bis 3 dB über Grenzwert</div>
     <div class="legend-item"><div class="legend-dot ld-over"></div>Über 3 dB über Grenzwert</div>
     <div class="legend-item"><div class="legend-dot ld-none"></div>Keine Daten</div>
-    <div class="legend-item" style="margin-left:auto;color:var(--muted)">Grenzwert Tag (aus Einstellungen)</div>
+    <div class="legend-item" style="margin-left:auto;color:var(--muted)">Hintergrund: Grenzwert Tag · Zahl unten: L_Nacht vs. Grenzwert Nacht</div>
   </div>
 </div>
 
@@ -147,6 +153,10 @@
   <div class="stat">
     <div class="stat-lbl">Überschreitungen Tag</div>
     <div class="stat-val" id="s-over" style="color:var(--red)">–</div>
+  </div>
+  <div class="stat">
+    <div class="stat-lbl">Überschreitungen Nacht</div>
+    <div class="stat-val" id="s-over-night" style="color:var(--red)">–</div>
   </div>
   <div class="stat">
     <div class="stat-lbl">Monats-LAeq (gesamt)</div>
@@ -202,14 +212,13 @@ async function loadMonth() {
 }
 
 function renderCalendar(json, year, month, since, until) {
-  const { day: limitDay } = loadLimits();
+  const { day: limitDay, night: limitNight } = loadLimits();
   const byDay = {};
   json.data.forEach(r => { byDay[r.day] = r; });
 
   // Remove old day cells (keep the 7 header cells)
   const grid = document.getElementById('cal-grid');
-  const cells = grid.querySelectorAll('.cal-cell');
-  cells.forEach(c => c.remove());
+  grid.querySelectorAll('.cal-cell').forEach(c => c.remove());
 
   // Day of week for first of month: Mon=0 ... Sun=6
   const firstDow = (new Date(year, month, 1).getDay() + 6) % 7;
@@ -223,7 +232,7 @@ function renderCalendar(json, year, month, since, until) {
   }
 
   let sumPow = 0, sumN = 0, maxDb = -Infinity;
-  let daysWithData = 0, overCount = 0;
+  let daysWithData = 0, overCount = 0, overNightCount = 0;
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dayStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -266,16 +275,32 @@ function renderCalendar(json, year, month, since, until) {
       cell.appendChild(dbDiv);
     }
 
+    // Night value
+    const nightDiv = document.createElement('div');
+    if (r && r.l_nacht != null) {
+      const dn = r.l_nacht - limitNight;
+      if (dn > 3)       nightDiv.className = 'cal-night over';
+      else if (dn > 0)  nightDiv.className = 'cal-night warn';
+      else              nightDiv.className = 'cal-night ok';
+      nightDiv.textContent = r.l_nacht.toFixed(1) + ' N';
+      if (dn > 0) overNightCount++;
+    } else {
+      nightDiv.className = 'cal-night nd';
+      nightDiv.textContent = '– N';
+    }
+    cell.appendChild(nightDiv);
+
     grid.appendChild(cell);
   }
 
   const monthLeq = sumN > 0 ? 10 * Math.log10(sumPow / sumN) : null;
   const fmtDb = v => v != null && isFinite(v) ? v.toFixed(1) + ' dB' : '–';
 
-  document.getElementById('s-days').textContent = daysWithData;
-  document.getElementById('s-over').textContent = overCount > 0 ? overCount : '0';
-  document.getElementById('s-leq').textContent  = fmtDb(monthLeq);
-  document.getElementById('s-max').textContent  = maxDb > -Infinity ? maxDb.toFixed(1) + ' dB' : '–';
+  document.getElementById('s-days').textContent       = daysWithData;
+  document.getElementById('s-over').textContent       = overCount;
+  document.getElementById('s-over-night').textContent = overNightCount;
+  document.getElementById('s-leq').textContent        = fmtDb(monthLeq);
+  document.getElementById('s-max').textContent        = maxDb > -Infinity ? maxDb.toFixed(1) + ' dB' : '–';
 }
 
 document.addEventListener('DOMContentLoaded', loadMonth);
