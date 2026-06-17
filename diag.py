@@ -17,8 +17,6 @@ import serial
 import db as database
 from reader import (
     _PACKET_SIZE,
-    _SYNC_ANCHOR,
-    _SYNC_OFFSET,
     _decode_packet,
     resolve_port,
 )
@@ -82,63 +80,75 @@ def _print_stats(stats: dict) -> None:
 
 
 def _process_buf(buf: bytearray, stats: dict) -> None:
-    """Extrahiert Pakete aus dem Buffer; loggt Sync-Treffer und Decode-Ergebnisse."""
-    while True:
-        idx = buf.find(_SYNC_ANCHOR)
-        if idx == -1:
-            keep = _SYNC_OFFSET + len(_SYNC_ANCHOR) - 1
-            if len(buf) > keep:
-                del buf[:len(buf) - keep]
+    """Extrahiert Pakete aus dem Buffer; loggt Marker-Treffer und Decode-Ergebnisse."""
+    while len(buf) >= _PACKET_SIZE:
+        found = False
+        for i in range(len(buf) - _PACKET_SIZE + 1):
+            if buf[i] not in (0xa0, 0xa1):
+                continue
+
+            stats["anchor_hits"] += 1
+            pkt = bytes(buf[i:i + _PACKET_SIZE])
+
+            # Paket hex-kompakt anzeigen (3 Gruppen: Header | Status | Timestamp)
+            h = " ".join(f"{b:02x}" for b in pkt[0:6])
+            s = " ".join(f"{b:02x}" for b in pkt[6:14])
+            t = " ".join(f"{b:02x}" for b in pkt[14:18])
+            _log(f"[PAKET]  {h}  |  {s}  |  {t}", _C_CYAN)
+
+            m = _decode_packet(pkt)
+            if m is not None:
+                stats["packets_decoded"] += 1
+                stats["last_packet_ts"] = time.time()
+                _log(
+                    f"[MESSUNG] {m.level_db:.1f} dB({m.weighting})  [{m.response}]"
+                    f"  (#{stats['packets_decoded']})",
+                    _C_GREEN,
+                )
+                try:
+                    database.insert(m)
+                    _log("[DB] gespeichert ✓", _C_DIM)
+                except Exception as e:
+                    _log(f"[DB-FEHLER] {e}", _C_RED)
+                del buf[:i + _PACKET_SIZE]
+                found = True
+                break
+            else:
+                stats["packets_failed"] += 1
+                reasons = []
+                if pkt[0] not in (0xa0, 0xa1):
+                    reasons.append(f"Marker=0x{pkt[0]:02x} (erwartet 0xa0/0xa1)")
+                if pkt[2] != 0x00:
+                    reasons.append(f"B2=0x{pkt[2]:02x} (erwartet 0x00)")
+                tens, ones, tenths = pkt[3] & 0x0f, pkt[4] & 0x0f, pkt[5] & 0x0f
+                if any(v > 9 for v in (tens, ones, tenths)):
+                    reasons.append(
+                        f"Ziffern-Nibble ungültig:"
+                        f" B3=0x{pkt[3]:02x} B4=0x{pkt[4]:02x} B5=0x{pkt[5]:02x}"
+                        f" → {tens}/{ones}/{tenths}"
+                    )
+                else:
+                    level_db = round(tens * 10 + ones + tenths * 0.1, 1)
+                    if not (20.0 <= level_db <= 130.0):
+                        reasons.append(
+                            f"Pegel außerhalb Bereich: {level_db} dB (erwartet 20–130)"
+                        )
+                hh = (pkt[14] >> 4) * 10 + (pkt[14] & 0x0f)
+                mm = (pkt[15] >> 4) * 10 + (pkt[15] & 0x0f)
+                ss = (pkt[16] & 0x0f) * 10 + (pkt[17] & 0x0f)
+                if not (0 <= hh <= 23 and 0 <= mm <= 59 and 0 <= ss <= 59):
+                    reasons.append(
+                        f"Uhrzeit ungültig: {hh:02d}:{mm:02d}:{ss:02d}"
+                        f" (B14=0x{pkt[14]:02x} B15=0x{pkt[15]:02x}"
+                        f" B16=0x{pkt[16]:02x} B17=0x{pkt[17]:02x})"
+                    )
+                reason_str = " | ".join(reasons) if reasons else "unbekannt"
+                _log(f"[DECODE-FEHLER] {reason_str}", _C_RED)
+
+        if not found:
+            if len(buf) > _PACKET_SIZE - 1:
+                del buf[:len(buf) - (_PACKET_SIZE - 1)]
             return
-
-        pkt_start = idx - _SYNC_OFFSET
-        if pkt_start < 0:
-            _log(
-                f"[SYNC] Anker bei buf[{idx}], Paket-Anfang fehlt (pkt_start={pkt_start})"
-                " — überspringe Anker",
-                _C_YELLOW,
-            )
-            del buf[:idx + len(_SYNC_ANCHOR)]
-            return
-
-        if len(buf) - pkt_start < _PACKET_SIZE:
-            if pkt_start > 0:
-                del buf[:pkt_start]
-            return
-
-        stats["anchor_hits"] += 1
-        pkt = bytes(buf[pkt_start:pkt_start + _PACKET_SIZE])
-
-        # Paket hex-kompakt anzeigen (3 Gruppen: Header | Anchor | Timestamp)
-        h  = " ".join(f"{b:02x}" for b in pkt[0:6])
-        a  = " ".join(f"{b:02x}" for b in pkt[6:14])
-        t  = " ".join(f"{b:02x}" for b in pkt[14:18])
-        _log(f"[PAKET]  {h}  |  {a}  |  {t}", _C_CYAN)
-
-        m = _decode_packet(pkt)
-        if m is not None:
-            stats["packets_decoded"] += 1
-            stats["last_packet_ts"] = time.time()
-            _log(
-                f"[MESSUNG] {m.level_db:.1f} dB({m.weighting})  [{m.response}]"
-                f"  (#{stats['packets_decoded']})",
-                _C_GREEN,
-            )
-            try:
-                database.insert(m)
-                _log("[DB] gespeichert ✓", _C_DIM)
-            except Exception as e:
-                _log(f"[DB-FEHLER] {e}", _C_RED)
-        else:
-            stats["packets_failed"] += 1
-            _log(
-                f"[DECODE-FEHLER] Byte[0]=0x{pkt[0]:02x} Byte[1]=0x{pkt[1]:02x}"
-                f"  Marker={'OK' if pkt[0] in (0xa0, 0xa1) else 'FALSCH'}"
-                f"  Anchor={'OK' if pkt[6:12] == _SYNC_ANCHOR else 'FALSCH'}",
-                _C_RED,
-            )
-
-        del buf[:pkt_start + _PACKET_SIZE]
 
 
 def run_diag(port: str, db_path) -> None:

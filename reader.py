@@ -15,8 +15,11 @@ Protocol identified via --probe + live capture (2026-06-04):
   Byte  3:    low nibble = TENS digit of dB (0-9)
   Byte  4:    low nibble = ONES digit of dB (0-9)
   Byte  5:    low nibble = TENTHS digit of dB (0-9)
-  Byte  6-11: 00 00 00 01 00 01  invariant sync anchor
-  Byte 12-13: variable status bytes (0x00 0x00 or 0x00 0x01 observed)
+  Byte  6-13: mode-dependent status bytes — NOT constant across device modes.
+              mode1 (byte1=0x4c): 00 00 00 01 00 01 00 00
+              mode2 (byte1=0x08): 00 00 02 01 00 02 00 08
+              bytes 6-7 and 9-10 appear stable (00 00 ?? 01 00 ??);
+              bytes 8, 11, 13 vary with device mode/range.
   Byte 14:    BCD HH (device clock hours)
   Byte 15:    BCD MM (device clock minutes)
   Byte 16:    tens digit of seconds (low nibble)
@@ -24,6 +27,9 @@ Protocol identified via --probe + live capture (2026-06-04):
 
   Example: a0 4c 00 03 06 09 00 00 00 01 00 01 00 00 01 06 02 09
            → 36.9 dB(A) at device clock 01:06:29
+
+  Sync strategy: scan for marker byte 0xa0/0xa1 at byte 0; bytes 6-13 are
+  NOT a reliable anchor because they differ between device modes.
 
   Weighting: A confirmed; C-weighting encoding not yet observed.
   Response/range: encoding not yet identified.
@@ -97,11 +103,6 @@ PROBE_BAUDS = [2400, 4800, 9600, 19200, 38400]
 PROBE_SECONDS = 4
 
 _PACKET_SIZE = 18
-# Bytes 6-11 are constant across all observed device modes; bytes 12-13 vary
-# with device state (0x00/0x01 observed at byte 13 depending on mode).
-# Using only the 6 invariant bytes avoids false-sync misses on mode changes.
-_SYNC_ANCHOR = bytes([0x00, 0x00, 0x00, 0x01, 0x00, 0x01])
-_SYNC_OFFSET = 6  # anchor starts at byte 6 within the 18-byte packet
 # Reopen port if no bytes received for this long (catches silent USB driver stalls)
 _WATCHDOG_SECONDS = 15
 
@@ -207,39 +208,32 @@ class SerialReader:
                     time.sleep(2)
 
     def _drain_packets(self, buf: bytearray) -> None:
-        """Extract complete 18-byte packets using the 6-byte sync anchor at offset 6."""
-        while True:
-            idx = buf.find(_SYNC_ANCHOR)
-            if idx == -1:
-                # Keep enough bytes so a split packet can be reconstructed:
-                # _SYNC_OFFSET header bytes before the anchor + (anchor_len-1) for a
-                # partial anchor that spans two reads.
-                keep = _SYNC_OFFSET + len(_SYNC_ANCHOR) - 1
-                if len(buf) > keep:
-                    del buf[:len(buf) - keep]
-                return
+        """Extract complete 18-byte packets by scanning for the 0xa0/0xa1 marker byte.
 
-            # Anchor found at idx; packet starts _SYNC_OFFSET bytes before it
-            pkt_start = idx - _SYNC_OFFSET
-            if pkt_start < 0:
-                # Anchor arrived but we're missing the leading bytes; discard and wait
-                del buf[:idx + len(_SYNC_ANCHOR)]
+        Bytes 6-13 differ between device modes and cannot be used as a reliable
+        anchor, so we sync on byte 0 (0xa0/0xa1) and validate the packet content.
+        """
+        while len(buf) >= _PACKET_SIZE:
+            found = False
+            for i in range(len(buf) - _PACKET_SIZE + 1):
+                if buf[i] not in (0xa0, 0xa1):
+                    continue
+                pkt = bytes(buf[i:i + _PACKET_SIZE])
+                m = _decode_packet(pkt)
+                if m is not None:
+                    del buf[:i + _PACKET_SIZE]
+                    now = time.monotonic()
+                    if now - self._last_emitted >= 0.8:
+                        self._q.put(m)
+                        self._last_emitted = now
+                    found = True
+                    break
+            if not found:
+                # Keep the last (PACKET_SIZE - 1) bytes so a packet that spans
+                # two reads can be completed on the next call.
+                if len(buf) > _PACKET_SIZE - 1:
+                    del buf[:len(buf) - (_PACKET_SIZE - 1)]
                 return
-
-            if len(buf) - pkt_start < _PACKET_SIZE:
-                # Full packet not yet in buffer
-                if pkt_start > 0:
-                    del buf[:pkt_start]
-                return
-
-            pkt = bytes(buf[pkt_start:pkt_start + _PACKET_SIZE])
-            m = _decode_packet(pkt)
-            if m is not None:
-                now = time.monotonic()
-                if now - self._last_emitted >= 0.8:
-                    self._q.put(m)
-                    self._last_emitted = now
-            del buf[:pkt_start + _PACKET_SIZE]
 
 
 def _decode_packet(pkt: bytes) -> Measurement | None:
@@ -251,8 +245,8 @@ def _decode_packet(pkt: bytes) -> Measurement | None:
     if pkt[0] not in (0xa0, 0xa1):
         return None
 
-    # Invariant anchor at bytes 6-11 (bytes 12-13 vary by device mode)
-    if pkt[6:12] != _SYNC_ANCHOR:
+    # Byte 2 is always 0x00; acts as a lightweight sanity check
+    if pkt[2] != 0x00:
         return None
 
     # dB value: low nibbles of bytes 3, 4, 5 = tens, ones, tenths

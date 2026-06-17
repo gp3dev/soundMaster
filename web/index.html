@@ -73,6 +73,29 @@
     }
     .ctrl { display: flex; align-items: center; gap: 5px; }
     .ctrl label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+    /* ── Schnellfilter ── */
+    .ctrl-quick {
+      width: 100%;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .qf-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .qf-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+      white-space: nowrap;
+      transition: background .12s, border-color .12s, color .12s;
+    }
+    .qf-btn:hover { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .qf-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
     input[type=date], input[type=time], select {
       background: var(--bg);
       border: 1px solid var(--border);
@@ -199,17 +222,27 @@
 </header>
 
 <div class="controls">
+  <div class="ctrl ctrl-quick">
+    <span class="qf-label">Schnellfilter</span>
+    <button class="qf-btn" onclick="setQuickRange(this,1)">1h</button>
+    <button class="qf-btn" onclick="setQuickRange(this,6)">6h</button>
+    <button class="qf-btn" onclick="setQuickRange(this,12)">12h</button>
+    <button class="qf-btn" onclick="setQuickRange(this,24)">24h</button>
+    <button class="qf-btn" onclick="setQuickRange(this,48)">48h</button>
+    <button class="qf-btn" onclick="setQuickRange(this,168)">7 Tage</button>
+    <button class="qf-btn" onclick="setQuickRange(this,720)">30 Tage</button>
+  </div>
   <div class="ctrl">
     <label for="inp-date">Datum</label>
-    <input type="date" id="inp-date">
+    <input type="date" id="inp-date" oninput="clearQuickRange()">
   </div>
   <div class="ctrl">
     <label for="inp-time">Von</label>
-    <input type="time" id="inp-time" value="08:00">
+    <input type="time" id="inp-time" value="08:00" oninput="clearQuickRange()">
   </div>
   <div class="ctrl">
     <label for="inp-dur">Dauer</label>
-    <select id="inp-dur">
+    <select id="inp-dur" onchange="clearQuickRange()">
       <option value="1" selected>1 Stunde</option>
       <option value="3">3 Stunden</option>
       <option value="6">6 Stunden</option>
@@ -217,6 +250,7 @@
       <option value="24">24 Stunden</option>
       <option value="48">48 Stunden</option>
       <option value="168">7 Tage</option>
+      <option value="720">30 Tage</option>
     </select>
   </div>
   <button class="btn" id="load-btn" onclick="loadData()">
@@ -308,17 +342,36 @@ const limitPlugin = {
   }
 };
 
+// ── Schnellfilter ─────────────────────────────────────────────────────────────
+
+function fmtDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtTime(d) {
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function setQuickRange(el, hours) {
+  const since = new Date(Date.now() - hours * 3600_000);
+  document.getElementById('inp-date').value = fmtDate(since);
+  document.getElementById('inp-time').value = fmtTime(since);
+  document.getElementById('inp-dur').value  = String(hours);
+  document.querySelectorAll('.qf-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  loadData();
+}
+
+function clearQuickRange() {
+  document.querySelectorAll('.qf-btn').forEach(b => b.classList.remove('active'));
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
   const since = new Date(Date.now() - 3600_000);
-  const y  = since.getFullYear();
-  const mo = String(since.getMonth() + 1).padStart(2, '0');
-  const d  = String(since.getDate()).padStart(2, '0');
-  const h  = String(since.getHours()).padStart(2, '0');
-  const mi = String(since.getMinutes()).padStart(2, '0');
-  document.getElementById('inp-date').value = `${y}-${mo}-${d}`;
-  document.getElementById('inp-time').value = `${h}:${mi}`;
+  document.getElementById('inp-date').value = fmtDate(since);
+  document.getElementById('inp-time').value = fmtTime(since);
+  document.querySelector('.qf-btn').classList.add('active');
   initChart();
   loadData();
   scheduleLive();
