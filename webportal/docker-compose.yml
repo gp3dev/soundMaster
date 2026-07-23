@@ -1,0 +1,22 @@
+services:
+  webportal:
+    build: .
+    image: soundmaster-webportal:latest
+    ports:
+      - "8080:8080"
+    environment:
+      SM_DB_PATH: /data/webportal.db
+      SM_HOST: 0.0.0.0
+      SM_PORT: "8080"
+      SM_ADMIN_PASSWORD: ${SM_ADMIN_PASSWORD:-}
+    volumes:
+      - webportal-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8080/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  webportal-data:

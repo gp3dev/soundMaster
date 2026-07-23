@@ -7,6 +7,7 @@
   <script src="/theme-init.js"></script>
   <link rel="stylesheet" href="/nav.css">
   <script src="/nav.js" defer></script>
+  <script src="/station.js" defer></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -202,17 +203,18 @@
     </button>
     <div class="nav-menu" id="nav-menu">
       <a href="/"         class="nav-item">📊 Verlauf</a>
-      <a href="/live"     class="nav-item">📡 Live</a>
       <a href="/profile"  class="nav-item">📈 Tagesganglinie</a>
       <a href="/calendar" class="nav-item">📅 Kalender</a>
       <a href="/daily"    class="nav-item">📋 Tages-Pegel</a>
       <a href="/export"   class="nav-item">💾 Export</a>
       <a href="/map"      class="nav-item">🗺️ Karte</a>
       <a href="/settings" class="nav-item active">⚙️ Einstellungen</a>
+      <a href="/stations" class="nav-item">📶 Messstellen</a>
       <a href="/docs"     class="nav-item" target="_blank">📖 API Docs</a>
     </div>
   </div>
   <h1>Einstellungen</h1>
+  <select id="station-picker" style="margin-left:8px"></select>
   <div style="display:flex;gap:8px;margin-left:auto">
     <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
     <button class="theme-btn" onclick="logout()" aria-label="Abmelden" title="Abmelden">⏻</button>
@@ -330,6 +332,8 @@ const ZONES = {
   industrie:  { day: 70, night: 70 },
 };
 
+let SM_STATION = null;
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Auth-Prüfung: nicht-authentifizierte Benutzer zur Login-Seite schicken
   try {
@@ -343,12 +347,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
+  const { slug } = await smInitPicker();
+  SM_STATION = slug;
+  if (!SM_STATION) {
+    document.querySelectorAll('.card').forEach(c => c.style.display = 'none');
+    document.body.insertAdjacentHTML('beforeend',
+      '<p class="empty-hint">Noch keine Messstelle angelegt. Bitte zunächst unter <a href="/stations">Messstellen</a> eine Station anlegen.</p>');
+    return;
+  }
+
   document.getElementById('inp-day').addEventListener('input', updatePreview);
   document.getElementById('inp-night').addEventListener('input', updatePreview);
 
   let s = null;
   try {
-    const res = await fetch('/api/settings');
+    const res = await fetch(`/api/settings?station=${SM_STATION}`);
     if (res.ok) s = await res.json();
   } catch (_) {}
 
@@ -422,7 +435,7 @@ async function saveAll() {
                  lat, lon, zone, comment, valid_from };
 
   try {
-    const res = await fetch('/api/settings', {
+    const res = await fetch(`/api/settings?station=${SM_STATION}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -471,7 +484,7 @@ async function deleteSettings(id) {
 async function loadHistory() {
   const wrap = document.getElementById('history-wrap');
   try {
-    const res = await fetch('/api/settings/history');
+    const res = await fetch(`/api/settings/history?station=${SM_STATION}`);
     if (!res.ok) throw new Error();
     const { data } = await res.json();
     if (!data.length) {

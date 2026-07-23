@@ -8,9 +8,11 @@ _sessions: dict[str, float] = {}  # token → expiry_unix
 _password_hash: Optional[str] = None
 
 
-def init(password_hash: Optional[str]) -> None:
-    global _password_hash
+def init(password_hash: Optional[str], session_ttl: Optional[float] = None) -> None:
+    global _password_hash, _SESSION_TTL
     _password_hash = password_hash
+    if session_ttl is not None:
+        _SESSION_TTL = session_ttl
 
 
 def is_configured() -> bool:
@@ -23,15 +25,20 @@ def hash_password(password: str) -> str:
     return f"pbkdf2$sha256${salt}${h}"
 
 
-def verify_password(password: str) -> bool:
-    if not _password_hash:
-        return False
+def verify_secret(secret: str, stored_hash: str) -> bool:
+    """Generic PBKDF2 verify — used both for the admin password and station API keys."""
     try:
-        _, _algo, salt, expected = _password_hash.split("$")
-        derived = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260_000).hex()
+        _, _algo, salt, expected = stored_hash.split("$")
+        derived = hashlib.pbkdf2_hmac("sha256", secret.encode(), salt.encode(), 260_000).hex()
         return secrets.compare_digest(expected, derived)
     except Exception:
         return False
+
+
+def verify_password(password: str) -> bool:
+    if not _password_hash:
+        return False
+    return verify_secret(password, _password_hash)
 
 
 def create_session() -> str:

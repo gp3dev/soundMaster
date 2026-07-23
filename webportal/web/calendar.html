@@ -7,6 +7,7 @@
   <script src="/theme-init.js"></script>
   <link rel="stylesheet" href="/nav.css">
   <script src="/nav.js" defer></script>
+  <script src="/station.js" defer></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -111,17 +112,18 @@
     </button>
     <div class="nav-menu" id="nav-menu">
       <a href="/"         class="nav-item">📊 Verlauf</a>
-      <a href="/live"     class="nav-item">📡 Live</a>
       <a href="/profile"  class="nav-item">📈 Tagesganglinie</a>
       <a href="/calendar" class="nav-item active">📅 Kalender</a>
       <a href="/daily"    class="nav-item">📋 Tages-Pegel</a>
       <a href="/export"   class="nav-item">💾 Export</a>
       <a href="/map"      class="nav-item">🗺️ Karte</a>
       <a href="/settings" class="nav-item">⚙️ Einstellungen</a>
+      <a href="/stations" class="nav-item">📶 Messstellen</a>
       <a href="/docs"     class="nav-item" target="_blank">📖 API Docs</a>
     </div>
   </div>
   <h1>Kalender</h1>
+  <select id="station-picker" style="margin-left:8px"></select>
   <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
 </header>
 
@@ -183,16 +185,19 @@ const MONTHS_DE = ['Januar','Februar','März','April','Mai','Juni',
 
 let currentYear  = new Date().getFullYear();
 let currentMonth = new Date().getMonth(); // 0-based
+let SM_STATION = null;
 
 let _cachedLimits = {
   day:   parseFloat(localStorage.getItem('sm_limit_day')   ?? 60),
   night: parseFloat(localStorage.getItem('sm_limit_night') ?? 45),
 };
 
-fetch('/api/settings').then(r => r.ok ? r.json() : null).then(s => {
-  if (!s) return;
-  _cachedLimits = { day: s.limit_day ?? _cachedLimits.day, night: s.limit_night ?? _cachedLimits.night };
-}).catch(() => {});
+function loadCachedLimits(station) {
+  fetch(`/api/settings?station=${station}`).then(r => r.ok ? r.json() : null).then(s => {
+    if (!s) return;
+    _cachedLimits = { day: s.limit_day ?? _cachedLimits.day, night: s.limit_night ?? _cachedLimits.night };
+  }).catch(() => {});
+}
 
 function loadLimits() { return _cachedLimits; }
 
@@ -212,7 +217,7 @@ async function loadMonth() {
   const until = `${currentYear}-${String(currentMonth + 1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
   try {
-    const resp = await fetch(`/stats/daily?since=${since}T00:00:00&until=${until}T23:59:59`);
+    const resp = await fetch(`/stats/daily?station=${SM_STATION}&since=${since}T00:00:00&until=${until}T23:59:59`);
     if (!resp.ok) return;
     renderCalendar(await resp.json(), currentYear, currentMonth);
   } catch(e) { console.error(e); }
@@ -305,7 +310,13 @@ function renderCalendar(json, year, month) {
   document.getElementById('s-max').textContent        = maxDb > -Infinity ? maxDb.toFixed(1) + ' dB' : '–';
 }
 
-document.addEventListener('DOMContentLoaded', loadMonth);
+document.addEventListener('DOMContentLoaded', async () => {
+  const { slug } = await smInitPicker();
+  SM_STATION = slug;
+  if (!SM_STATION) return;
+  loadCachedLimits(SM_STATION);
+  loadMonth();
+});
 </script>
 </body>
 </html>

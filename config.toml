@@ -9,3 +9,13 @@ path = "~/.local/share/soundmaster/measurements.db"
 [api]
 host = "0.0.0.0"
 port = 8080
+
+[webportal]
+# Leer lassen, um die Übertragung ans Webportal zu deaktivieren (Stand-alone-Betrieb).
+url = ""
+api_key = ""
+batch_size = 200
+interval = 10.0
+timeout = 5.0
+backoff_max = 300.0
+retain_hours = 2.0

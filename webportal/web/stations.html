@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoundMaster · Messstellen</title>
+  <script src="/theme-init.js"></script>
+  <link rel="stylesheet" href="/nav.css">
+  <script src="/nav.js" defer></script>
+  <script src="/station.js" defer></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    header { display: flex; align-items: center; gap: 12px; }
+    h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .card.narrow { max-width: 480px; }
+    .card h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--muted);
+    }
+
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label { font-size: 12px; color: var(--muted); }
+    input[type=text] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: inherit;
+      width: 100%;
+    }
+    input[type=text]:focus { outline: 1px solid var(--blue); }
+
+    .btn {
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      transition: opacity .15s;
+      align-self: flex-start;
+    }
+    .btn:hover { opacity: .85; }
+    .btn-del {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 3px;
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-del:hover { border-color: #e53935; color: #e53935; }
+    .btn-regen {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 3px;
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      margin-right: 6px;
+    }
+    .btn-regen:hover { border-color: var(--blue); color: var(--blue); }
+
+    .key-box {
+      display: none;
+      background: var(--bg);
+      border: 1px solid var(--green);
+      border-radius: 4px;
+      padding: 12px 14px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .key-box.show { display: block; }
+    .key-box code {
+      display: block;
+      font-family: monospace;
+      font-size: 13px;
+      background: var(--surface);
+      padding: 8px 10px;
+      border-radius: 4px;
+      margin-top: 6px;
+      word-break: break-all;
+      user-select: all;
+    }
+
+    .stations-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .stations-table th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 400;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .stations-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .stations-table tr:last-child td { border-bottom: none; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-ok   { background: rgba(46,125,50,.15); color: var(--green); }
+    .badge-warn { background: rgba(255,193,7,.15); color: var(--yellow); }
+    .badge-err  { background: rgba(229,57,53,.15); color: var(--red); }
+    .slug { font-family: monospace; font-size: 12px; color: var(--muted); }
+    .empty-hint { color: var(--muted); font-size: 12px; font-style: italic; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="nav-wrap">
+    <button class="burger" onclick="navToggle()" aria-label="Menü">
+      <svg width="18" height="14" viewBox="0 0 18 14" fill="none">
+        <rect y="0"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="6"  width="18" height="2" rx="1" fill="currentColor"/>
+        <rect y="12" width="18" height="2" rx="1" fill="currentColor"/>
+      </svg>
+    </button>
+    <div class="nav-menu" id="nav-menu">
+      <a href="/"         class="nav-item">📊 Verlauf</a>
+      <a href="/profile"  class="nav-item">📈 Tagesganglinie</a>
+      <a href="/calendar" class="nav-item">📅 Kalender</a>
+      <a href="/daily"    class="nav-item">📋 Tages-Pegel</a>
+      <a href="/export"   class="nav-item">💾 Export</a>
+      <a href="/map"      class="nav-item">🗺️ Karte</a>
+      <a href="/settings" class="nav-item">⚙️ Einstellungen</a>
+      <a href="/stations" class="nav-item active">📶 Messstellen</a>
+      <a href="/docs"     class="nav-item" target="_blank">📖 API Docs</a>
+    </div>
+  </div>
+  <h1>Messstellen</h1>
+  <div style="display:flex;gap:8px;margin-left:auto">
+    <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
+    <button class="theme-btn" onclick="logout()" aria-label="Abmelden" title="Abmelden">⏻</button>
+  </div>
+</header>
+
+<div class="card narrow">
+  <h2>Neue Messstelle anlegen</h2>
+  <div class="field">
+    <label for="inp-name">Bezeichnung</label>
+    <input type="text" id="inp-name" placeholder="z.B. A6 Dechendorf">
+  </div>
+  <button class="btn" onclick="createStation()">Anlegen</button>
+  <div class="key-box" id="key-box">
+    <strong>API-Key (nur jetzt sichtbar — bitte sofort kopieren):</strong>
+    <code id="key-value"></code>
+    <div style="margin-top:8px;color:var(--muted)">
+      Diesen Key in <code>config.toml</code> des Erfassungsmoduls unter <code>[webportal] api_key</code> eintragen.
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Alle Messstellen</h2>
+  <div id="table-wrap"><span class="empty-hint">Wird geladen…</span></div>
+</div>
+
+<script>
+'use strict';
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const st = await fetch('/auth/status').then(r => r.json());
+    if (!st.authenticated) {
+      location.replace('/login?next=/stations');
+      return;
+    }
+  } catch (_) {
+    location.replace('/login?next=/stations');
+    return;
+  }
+  loadStations();
+});
+
+async function createStation() {
+  const name = document.getElementById('inp-name').value.trim();
+  if (!name) return;
+  try {
+    const res = await fetch('/api/stations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    document.getElementById('key-value').textContent = data.api_key;
+    document.getElementById('key-box').classList.add('show');
+    document.getElementById('inp-name').value = '';
+    loadStations();
+  } catch (e) {
+    alert('Fehler beim Anlegen: ' + e.message);
+  }
+}
+
+async function revokeStation(id) {
+  if (!confirm('Diese Messstelle wirklich widerrufen? Der bestehende API-Key wird ungültig.')) return;
+  try {
+    const res = await fetch(`/api/stations/${id}/revoke`, { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    loadStations();
+  } catch (e) {
+    alert('Fehler: ' + e.message);
+  }
+}
+
+async function regenerateKey(id) {
+  if (!confirm('Neuen API-Key erzeugen? Der alte Key wird sofort ungültig.')) return;
+  try {
+    const res = await fetch(`/api/stations/${id}/regenerate-key`, { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    document.getElementById('key-value').textContent = data.api_key;
+    document.getElementById('key-box').classList.add('show');
+    loadStations();
+  } catch (e) {
+    alert('Fehler: ' + e.message);
+  }
+}
+
+async function loadStations() {
+  const wrap = document.getElementById('table-wrap');
+  try {
+    const res = await fetch('/api/stations/admin');
+    if (!res.ok) throw new Error();
+    const stations = await res.json();
+    if (!stations.length) {
+      wrap.innerHTML = '<span class="empty-hint">Noch keine Messstelle angelegt.</span>';
+      return;
+    }
+    const rows = stations.map(s => {
+      const revoked = !!s.revoked_at;
+      const statusBadge = revoked
+        ? '<span class="badge badge-err">Widerrufen</span>'
+        : `<span class="badge ${_smBadgeClass(s.last_seen_at)}">${esc(smLastSeenLabel(s.last_seen_at))}</span>`;
+      const actions = revoked
+        ? '<span class="empty-hint">–</span>'
+        : `<button class="btn-regen" onclick="regenerateKey(${s.id})">Key erneuern</button>` +
+          `<button class="btn-del" onclick="revokeStation(${s.id})">Widerrufen</button>`;
+      return `<tr>
+        <td>${esc(s.name)}</td>
+        <td class="slug">${esc(s.slug)}</td>
+        <td>${statusBadge}</td>
+        <td>${actions}</td>
+      </tr>`;
+    }).join('');
+    wrap.innerHTML = `<table class="stations-table">
+      <thead><tr><th>Bezeichnung</th><th>Slug</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  } catch (_) {
+    wrap.innerHTML = '<span class="empty-hint">Messstellen konnten nicht geladen werden.</span>';
+  }
+}
+
+function _smBadgeClass(lastSeenAtUnix) {
+  const cls = smLastSeenClass(lastSeenAtUnix);
+  return cls === 'ok' ? 'badge-ok' : cls === 'warn' ? 'badge-warn' : 'badge-err';
+}
+
+async function logout() {
+  await fetch('/auth/logout', { method: 'POST' }).catch(() => {});
+  location.replace('/login');
+}
+
+function esc(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

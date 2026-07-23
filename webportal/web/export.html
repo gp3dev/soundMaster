@@ -7,6 +7,7 @@
   <script src="/theme-init.js"></script>
   <link rel="stylesheet" href="/nav.css">
   <script src="/nav.js" defer></script>
+  <script src="/station.js" defer></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -80,17 +81,18 @@
     </button>
     <div class="nav-menu" id="nav-menu">
       <a href="/"         class="nav-item">📊 Verlauf</a>
-      <a href="/live"     class="nav-item">📡 Live</a>
       <a href="/profile"  class="nav-item">📈 Tagesganglinie</a>
       <a href="/calendar" class="nav-item">📅 Kalender</a>
       <a href="/daily"    class="nav-item">📋 Tages-Pegel</a>
       <a href="/export"   class="nav-item active">💾 Export</a>
       <a href="/map"      class="nav-item">🗺️ Karte</a>
       <a href="/settings" class="nav-item">⚙️ Einstellungen</a>
+      <a href="/stations" class="nav-item">📶 Messstellen</a>
       <a href="/docs"     class="nav-item" target="_blank">📖 API Docs</a>
     </div>
   </div>
   <h1>Export</h1>
+  <select id="station-picker" style="margin-left:8px"></select>
   <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
 </header>
 
@@ -119,15 +121,17 @@
 <div class="card">
   <h2>Direkter API-Zugriff</h2>
   <div class="hint">
-    Rohdaten: <code>GET /export/csv?since=2026-06-01T00:00:00&until=2026-06-30T23:59:59</code><br>
-    Tages-Pegel: <code>GET /stats/daily?since=…&until=…</code><br>
-    Stundenprofil: <code>GET /stats/hourly-profile?days=30</code><br>
+    Rohdaten: <code>GET /export/csv?station=&lt;slug&gt;&since=2026-06-01T00:00:00&until=2026-06-30T23:59:59</code><br>
+    Tages-Pegel: <code>GET /stats/daily?station=&lt;slug&gt;&since=…&until=…</code><br>
+    Stundenprofil: <code>GET /stats/hourly-profile?station=&lt;slug&gt;&days=30</code><br>
     Vollständige Dokumentation: <a href="/docs" style="color:var(--blue)">/docs</a>
   </div>
 </div>
 
 <script>
 'use strict';
+
+let SM_STATION = null;
 
 function getRange() {
   const since = document.getElementById('inp-since').value;
@@ -139,7 +143,7 @@ function getRange() {
 function downloadCsv() {
   const r = getRange();
   if (!r) return;
-  const url = `/export/csv?since=${r.since}T00:00:00&until=${r.until}T23:59:59`;
+  const url = `/export/csv?station=${SM_STATION}&since=${r.since}T00:00:00&until=${r.until}T23:59:59`;
   const a = document.createElement('a');
   a.href = url;
   a.download = '';
@@ -151,10 +155,13 @@ function downloadCsv() {
 function openReport() {
   const r = getRange();
   if (!r) return;
-  window.open(`/report?since=${r.since}T00:00:00&until=${r.until}T23:59:59`, '_blank');
+  window.open(`/report?station=${SM_STATION}&since=${r.since}T00:00:00&until=${r.until}T23:59:59`, '_blank');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  const { slug } = await smInitPicker();
+  SM_STATION = slug;
+
   const until = new Date();
   const since = new Date(+until - 30 * 86400_000);
   document.getElementById('inp-since').value = since.toISOString().slice(0, 10);

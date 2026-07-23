@@ -7,6 +7,7 @@
   <script src="/theme-init.js"></script>
   <link rel="stylesheet" href="/nav.css">
   <script src="/nav.js" defer></script>
+  <script src="/station.js" defer></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -75,17 +76,18 @@
     </button>
     <div class="nav-menu" id="nav-menu">
       <a href="/"         class="nav-item">📊 Verlauf</a>
-      <a href="/live"     class="nav-item">📡 Live</a>
       <a href="/profile"  class="nav-item">📈 Tagesganglinie</a>
       <a href="/calendar" class="nav-item">📅 Kalender</a>
       <a href="/daily"    class="nav-item">📋 Tages-Pegel</a>
       <a href="/export"   class="nav-item">💾 Export</a>
       <a href="/map"      class="nav-item active">🗺️ Karte</a>
       <a href="/settings" class="nav-item">⚙️ Einstellungen</a>
+      <a href="/stations" class="nav-item">📶 Messstellen</a>
       <a href="/docs"     class="nav-item" target="_blank">📖 API Docs</a>
     </div>
   </div>
   <h1>Karte</h1>
+  <select id="station-picker" style="margin-left:8px"></select>
   <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
   <div class="location-info" id="loc-info" style="display:none">
     <strong id="loc-name">–</strong>
@@ -105,9 +107,15 @@
 'use strict';
 
 document.addEventListener('DOMContentLoaded', async () => {
+  const { slug } = await smInitPicker();
+  if (!slug) {
+    document.getElementById('no-coords').style.display = 'block';
+    return;
+  }
+
   let lat, lon, name;
   try {
-    const res = await fetch('/api/settings');
+    const res = await fetch(`/api/settings?station=${slug}`);
     if (res.ok) {
       const s = await res.json();
       lat  = s.lat  ?? parseFloat(localStorage.getItem('sm_lat'));

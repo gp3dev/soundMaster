@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SoundMaster</title>
+  <title>SoundMaster · Live</title>
   <script src="/theme-init.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -28,15 +28,12 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      flex-wrap: wrap;
     }
-    h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
+    h1 { font-size: 18px; font-weight: 600; letter-spacing: .5px; }
     .status {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--muted);
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--muted);
+      margin-left: 4px;
     }
     .dot {
       width: 8px; height: 8px;
@@ -44,60 +41,51 @@
       background: var(--muted);
       transition: background .3s;
     }
-    .dot.ok { background: var(--green); }
+    .dot.ok  { background: var(--green); }
     .dot.err { background: var(--red); }
-    .live {
-      margin-left: auto;
-      text-align: right;
-    }
-    .live-db {
-      font-size: 32px;
-      font-weight: 700;
-      color: var(--green);
-      font-variant-numeric: tabular-nums;
-      line-height: 1;
-    }
-    .live-db.over { color: var(--red); }
-    .live-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
-    /* ── Controls ── */
-    .controls {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      padding: 10px 14px;
+    /* ── Big display ── */
+    .display {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
+      padding: 24px 20px;
+      text-align: center;
     }
-    .ctrl { display: flex; align-items: center; gap: 5px; }
-    .ctrl label { font-size: 11px; color: var(--muted); white-space: nowrap; }
-
-    /* ── Schnellfilter ── */
-    .ctrl-quick {
-      width: 100%;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--border);
-      flex-wrap: wrap;
+    .display-db {
+      font-size: 72px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: var(--green);
+      line-height: 1;
+      letter-spacing: -2px;
+      transition: color .3s;
     }
-    .qf-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
-    .qf-btn {
-      background: transparent;
-      border: 1px solid var(--border);
+    .display-db.warn { color: var(--yellow); }
+    .display-db.over { color: var(--red); }
+    .display-db.stale { color: var(--muted); }
+    .display-meta {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: .3px;
+    }
+    .display-time {
+      margin-top: 4px;
+      font-size: 16px;
       color: var(--text);
-      padding: 4px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      font-family: inherit;
-      white-space: nowrap;
-      transition: background .12s, border-color .12s, color .12s;
+      font-variant-numeric: tabular-nums;
     }
-    .qf-btn:hover { background: var(--blue); border-color: var(--blue); color: #fff; }
-    .qf-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
-    input[type=date], input[type=time], select {
-      background: var(--bg);
+
+    /* ── Window control ── */
+    .window-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .window-bar label { font-size: 12px; color: var(--muted); }
+    select {
+      background: var(--surface);
       border: 1px solid var(--border);
       color: var(--text);
       padding: 5px 8px;
@@ -105,37 +93,23 @@
       font-size: 13px;
       font-family: inherit;
     }
-    input[type=date]:focus, input[type=time]:focus, select:focus {
-      outline: 1px solid var(--blue);
+    select:focus { outline: 1px solid var(--blue); }
+    .live-badge {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--muted);
     }
-    input[type=checkbox] { width: 14px; height: 14px; accent-color: var(--blue); }
-    .btn {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      background: var(--blue);
-      color: #fff;
-      border: none;
-      padding: 6px 14px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 13px;
-      font-family: inherit;
-      transition: opacity .15s;
-    }
-    .btn:hover { opacity: .85; }
-    .btn:disabled { opacity: .5; cursor: default; }
-    .spinner {
-      width: 12px; height: 12px;
-      border: 2px solid rgba(255,255,255,.3);
-      border-top-color: #fff;
+    .pulse {
+      width: 8px; height: 8px;
       border-radius: 50%;
-      animation: spin .7s linear infinite;
-      display: none;
+      background: var(--green);
+      animation: pulse 1.4s ease-in-out infinite;
     }
-    .btn.loading .spinner { display: block; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .ctrl-right { margin-left: auto; }
+    .pulse.paused { animation: none; background: var(--muted); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: .4; transform: scale(.7); }
+    }
 
     /* ── Chart ── */
     .chart-wrap {
@@ -145,18 +119,7 @@
       border-radius: 6px;
       padding: 14px;
       flex: 1;
-      min-height: 300px;
-    }
-    .chart-wrap canvas { display: block; }
-    .empty-msg {
-      position: absolute;
-      inset: 0;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      color: var(--muted);
-      font-size: 15px;
-      pointer-events: none;
+      min-height: 240px;
     }
 
     /* ── Stats ── */
@@ -173,14 +136,11 @@
       padding: 10px 14px;
     }
     .stat-lbl {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: .6px;
-      color: var(--muted);
+      font-size: 10px; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--muted);
     }
     .stat-val {
-      font-size: 24px;
-      font-weight: 700;
+      font-size: 22px; font-weight: 700;
       font-variant-numeric: tabular-nums;
       margin-top: 3px;
     }
@@ -189,83 +149,37 @@
 <body>
 
 <header>
-  <div class="nav-wrap">
-    <button class="burger" onclick="navToggle()" aria-label="Menü">
-      <svg width="18" height="14" viewBox="0 0 18 14" fill="none">
-        <rect y="0"  width="18" height="2" rx="1" fill="currentColor"/>
-        <rect y="6"  width="18" height="2" rx="1" fill="currentColor"/>
-        <rect y="12" width="18" height="2" rx="1" fill="currentColor"/>
-      </svg>
-    </button>
-    <div class="nav-menu" id="nav-menu">
-      <a href="/"         class="nav-item active">📊 Verlauf</a>
-      <a href="/live"     class="nav-item">📡 Live</a>
-      <a href="/profile"  class="nav-item">📈 Tagesganglinie</a>
-      <a href="/calendar" class="nav-item">📅 Kalender</a>
-      <a href="/daily"    class="nav-item">📋 Tages-Pegel</a>
-      <a href="/export"   class="nav-item">💾 Export</a>
-      <a href="/map"      class="nav-item">🗺️ Karte</a>
-      <a href="/settings" class="nav-item">⚙️ Einstellungen</a>
-      <a href="/docs"     class="nav-item" target="_blank">📖 API Docs</a>
-    </div>
-  </div>
-  <h1>SoundMaster</h1>
+  <h1>SoundMaster · Live</h1>
   <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
   <div class="status">
     <div class="dot" id="dot"></div>
     <span id="status-txt">–</span>
   </div>
-  <div class="live">
-    <div class="live-db" id="live-db">–</div>
-    <div class="live-meta" id="live-meta">–</div>
-  </div>
 </header>
 
-<div class="controls">
-  <div class="ctrl ctrl-quick">
-    <span class="qf-label">Schnellfilter</span>
-    <button class="qf-btn" onclick="setQuickRange(this,1)">1h</button>
-    <button class="qf-btn" onclick="setQuickRange(this,6)">6h</button>
-    <button class="qf-btn" onclick="setQuickRange(this,12)">12h</button>
-    <button class="qf-btn" onclick="setQuickRange(this,24)">24h</button>
-    <button class="qf-btn" onclick="setQuickRange(this,48)">48h</button>
-    <button class="qf-btn" onclick="setQuickRange(this,168)">7 Tage</button>
-    <button class="qf-btn" onclick="setQuickRange(this,720)">30 Tage</button>
-  </div>
-  <div class="ctrl">
-    <label for="inp-date">Datum</label>
-    <input type="date" id="inp-date" oninput="clearQuickRange()">
-  </div>
-  <div class="ctrl">
-    <label for="inp-time">Von</label>
-    <input type="time" id="inp-time" value="08:00" oninput="clearQuickRange()">
-  </div>
-  <div class="ctrl">
-    <label for="inp-dur">Dauer</label>
-    <select id="inp-dur" onchange="clearQuickRange()">
-      <option value="1" selected>1 Stunde</option>
-      <option value="3">3 Stunden</option>
-      <option value="6">6 Stunden</option>
-      <option value="12">12 Stunden</option>
-      <option value="24">24 Stunden</option>
-      <option value="48">48 Stunden</option>
-      <option value="168">7 Tage</option>
-      <option value="720">30 Tage</option>
-    </select>
-  </div>
-  <button class="btn" id="load-btn" onclick="loadData()">
-    <div class="spinner" id="spin"></div>
-    Laden
-  </button>
-  <div class="ctrl ctrl-right">
-    <label for="inp-auto">Auto-Refresh</label>
-    <input type="checkbox" id="inp-auto" checked>
+<div class="display">
+  <div class="display-db stale" id="disp-db">–</div>
+  <div class="display-meta" id="disp-meta">–</div>
+  <div class="display-time" id="disp-time">–</div>
+</div>
+
+<div class="window-bar">
+  <label for="inp-win">Fenster</label>
+  <select id="inp-win" onchange="onWindowChange()">
+    <option value="1">1 Minute</option>
+    <option value="5">5 Minuten</option>
+    <option value="10" selected>10 Minuten</option>
+    <option value="30">30 Minuten</option>
+    <option value="60">60 Minuten</option>
+  </select>
+  <div class="live-badge">
+    <div class="pulse" id="pulse"></div>
+    <span id="live-txt">Live</span>
   </div>
 </div>
 
 <div class="chart-wrap">
   <canvas id="chart"></canvas>
-  <div class="empty-msg" id="empty-msg">Keine Daten im gewählten Zeitraum</div>
 </div>
 
 <div class="stats">
@@ -278,11 +192,11 @@
     <div class="stat-val" id="s-max" style="color:var(--red)">–</div>
   </div>
   <div class="stat">
-    <div class="stat-lbl">LAeq</div>
+    <div class="stat-lbl">Mittelwert</div>
     <div class="stat-val" id="s-avg" style="color:var(--blue)">–</div>
   </div>
   <div class="stat">
-    <div class="stat-lbl">Messungen</div>
+    <div class="stat-lbl">Im Fenster</div>
     <div class="stat-val" id="s-cnt" style="color:var(--muted)">–</div>
   </div>
 </div>
@@ -290,97 +204,24 @@
 <script>
 'use strict';
 
+const BUFFER = [];   // {x: ms, y: db}
+let lastTsUnix = 0;
 let chart = null;
-let autoTimer = null;
-let liveTimer = null;
 
 const cssVar = name =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 window.addEventListener('themechange', () => { if (chart) chart.update('none'); });
 
-// ── Limits ────────────────────────────────────────────────────────────────────
-
-let _cachedLimits = {
-  day:   parseFloat(localStorage.getItem('sm_limit_day')   ?? 60),
-  night: parseFloat(localStorage.getItem('sm_limit_night') ?? 45),
-};
-
-fetch('/api/settings').then(r => r.ok ? r.json() : null).then(s => {
-  if (!s) return;
-  _cachedLimits = { day: s.limit_day ?? _cachedLimits.day, night: s.limit_night ?? _cachedLimits.night };
-  if (chart) chart.update('none');
-}).catch(() => {});
-
-function loadLimits() { return _cachedLimits; }
-
-const limitPlugin = {
-  id: 'limitLines',
-  afterDraw(chart) {
-    const { ctx, chartArea, scales } = chart;
-    if (!chartArea) return;
-    const { day, night } = loadLimits();
-    [
-      [day,   '#ffc107', `Tag ${day} dB(A)`],
-      [night, '#4fc3f7', `Nacht ${night} dB(A)`],
-    ].forEach(([val, color, label]) => {
-      const y = scales.y.getPixelForValue(val);
-      if (y < chartArea.top || y > chartArea.bottom) return;
-      ctx.save();
-      ctx.beginPath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.setLineDash([6, 4]);
-      ctx.moveTo(chartArea.left, y);
-      ctx.lineTo(chartArea.right, y);
-      ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.font = '11px Segoe UI,system-ui,sans-serif';
-      ctx.fillText(label, chartArea.left + 6, y - 4);
-      ctx.restore();
-    });
-  }
-};
-
-// ── Schnellfilter ─────────────────────────────────────────────────────────────
-
-function fmtDate(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function fmtTime(d) {
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-
-function setQuickRange(el, hours) {
-  const since = new Date(Date.now() - hours * 3600_000);
-  document.getElementById('inp-date').value = fmtDate(since);
-  document.getElementById('inp-time').value = fmtTime(since);
-  document.getElementById('inp-dur').value  = String(hours);
-  document.querySelectorAll('.qf-btn').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
-  loadData();
-}
-
-function clearQuickRange() {
-  document.querySelectorAll('.qf-btn').forEach(b => b.classList.remove('active'));
-}
-
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-  const since = new Date(Date.now() - 3600_000);
-  document.getElementById('inp-date').value = fmtDate(since);
-  document.getElementById('inp-time').value = fmtTime(since);
-  document.querySelector('.qf-btn').classList.add('active');
   initChart();
-  loadData();
-  scheduleLive();
-  setupAutoRefresh();
+  loadInitial().then(() => {
+    pollCurrent();
+    pollHealth();
+  });
 });
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 // ── Chart ─────────────────────────────────────────────────────────────────────
 
@@ -389,24 +230,16 @@ function initChart() {
   chart = new Chart(ctx, {
     type: 'line',
     data: {
-      datasets: [
-        // Dataset 0: min — lower bound of the min/max band (no visible border)
-        {
-          data: [], borderWidth: 0, pointRadius: 0, fill: false,
-        },
-        // Dataset 1: max — fills down to dataset 0 = the band
-        {
-          data: [], borderWidth: 0, pointRadius: 0,
-          fill: '-1', backgroundColor: 'rgba(76,175,80,0.12)',
-        },
-        // Dataset 2: LAeq line
-        {
-          data: [], borderColor: '#4caf50', backgroundColor: 'transparent',
-          borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.2,
-        },
-      ]
+      datasets: [{
+        data: [],
+        borderColor: '#4caf50',
+        backgroundColor: 'rgba(76,175,80,0.07)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.2,
+      }]
     },
-    plugins: [limitPlugin],
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -419,25 +252,13 @@ function initChart() {
           borderColor: '#333',
           borderWidth: 1,
           padding: 8,
-          filter(item) { return item.datasetIndex === 2; },
           callbacks: {
             title(items) {
-              const d = new Date(items[0].parsed.x);
-              return d.toLocaleString('de-DE', {
-                day: '2-digit', month: '2-digit', year: 'numeric',
+              return new Date(items[0].parsed.x).toLocaleTimeString('de-DE', {
                 hour: '2-digit', minute: '2-digit', second: '2-digit',
               });
             },
-            label(item) {
-              const i   = item.dataIndex;
-              const leq = item.parsed.y.toFixed(1);
-              const min = chart.data.datasets[0].data[i]?.y?.toFixed(1) ?? '–';
-              const max = chart.data.datasets[1].data[i]?.y?.toFixed(1) ?? '–';
-              return [
-                `  LAeq: ${leq} dB`,
-                `  Max: ${max} dB   Min: ${min} dB`,
-              ];
-            }
+            label(item) { return `  ${item.parsed.y.toFixed(1)} dB`; }
           }
         }
       },
@@ -445,15 +266,10 @@ function initChart() {
         x: {
           type: 'time',
           time: {
-            displayFormats: {
-              second: 'HH:mm:ss',
-              minute: 'HH:mm',
-              hour:   'HH:mm',
-              day:    'dd.MM.',
-            }
+            displayFormats: { second: 'HH:mm:ss', minute: 'HH:mm', hour: 'HH:mm' }
           },
           grid:  { color: () => cssVar('--chart-grid') },
-          ticks: { color: () => cssVar('--chart-ticks'), maxTicksLimit: 10 }
+          ticks: { color: () => cssVar('--chart-ticks'), maxTicksLimit: 8 }
         },
         y: {
           grid:  { color: () => cssVar('--chart-grid') },
@@ -464,137 +280,131 @@ function initChart() {
   });
 }
 
-// ── Load history ──────────────────────────────────────────────────────────────
+function updateChart() {
+  const now      = Date.now();
+  const windowMin = parseInt(document.getElementById('inp-win').value, 10);
+  const cutoff   = now - windowMin * 60_000;
 
-async function loadData() {
-  const btn  = document.getElementById('load-btn');
-  const spin = document.getElementById('spin');
-  const emptyMsg = document.getElementById('empty-msg');
+  const keep = BUFFER.findIndex(p => p.x >= cutoff);
+  if (keep > 0) BUFFER.splice(0, keep);
+  else if (keep === -1) BUFFER.length = 0;
 
-  btn.disabled = true;
-  btn.classList.add('loading');
-  emptyMsg.style.display = 'none';
+  chart.data.datasets[0].data = BUFFER;
+  chart.options.scales.x.min = cutoff;
+  chart.options.scales.x.max = now;
 
-  try {
-    const { since, until } = getRange();
-    const url = `/history/aggregate?since=${since.toISOString()}&until=${until.toISOString()}&buckets=200`;
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const json = await resp.json();
-
-    const rows = json.data;
-    const minPts = rows.map(r => ({ x: r.ts_unix * 1000, y: r.min_db }));
-    const maxPts = rows.map(r => ({ x: r.ts_unix * 1000, y: r.max_db }));
-    const leqPts = rows.map(r => ({ x: r.ts_unix * 1000, y: r.leq_db }));
-
-    chart.data.datasets[0].data = minPts;
-    chart.data.datasets[1].data = maxPts;
-    chart.data.datasets[2].data = leqPts;
-    chart.options.scales.x.min = since.getTime();
-    chart.options.scales.x.max = until.getTime();
-
-    if (rows.length > 0) {
-      const globalMin = Math.min(...rows.map(r => r.min_db));
-      const globalMax = Math.max(...rows.map(r => r.max_db));
-      // Energy-average of bucket LAeqs = overall LAeq for the window
-      const leqTotal = 10 * Math.log10(rows.reduce((s, r) => s + 10 ** (r.leq_db / 10), 0) / rows.length);
-      const totalCount = rows.reduce((s, r) => s + r.count, 0);
-      const { day: limDay, night: limNight } = loadLimits();
-      chart.options.scales.y.min = Math.max(0, Math.floor(Math.min(globalMin, limNight) - 5));
-      chart.options.scales.y.max =             Math.ceil(Math.max(globalMax, limDay) + 5);
-      setStats(globalMin, globalMax, leqTotal, totalCount);
-    } else {
-      chart.options.scales.y.min = undefined;
-      chart.options.scales.y.max = undefined;
-      emptyMsg.style.display = 'flex';
-      setStats(null, null, null, 0);
+  if (BUFFER.length > 0) {
+    let min = Infinity, max = -Infinity, sum = 0;
+    for (const p of BUFFER) {
+      if (p.y < min) min = p.y;
+      if (p.y > max) max = p.y;
+      sum += p.y;
     }
-
-    chart.update('none');
-  } catch (e) {
-    console.error('loadData:', e);
-  } finally {
-    btn.disabled = false;
-    btn.classList.remove('loading');
+    const avg = sum / BUFFER.length;
+    chart.options.scales.y.min = Math.max(0, Math.floor(min - 3));
+    chart.options.scales.y.max =            Math.ceil(max + 3);
+    setStats(min, max, avg, BUFFER.length);
   }
+
+  chart.update('none');
 }
 
-function getRange() {
-  const date  = document.getElementById('inp-date').value  || todayStr();
-  const time  = document.getElementById('inp-time').value  || '08:00';
-  const hours = parseInt(document.getElementById('inp-dur').value) || 24;
-  const [y, mo, d] = date.split('-').map(Number);
-  const [h, mi]    = time.split(':').map(Number);
-  const since = new Date(y, mo - 1, d, h, mi, 0);
-  const until = new Date(since.getTime() + hours * 3600_000);
-  return { since, until };
+// ── Load initial history ──────────────────────────────────────────────────────
+
+async function loadInitial() {
+  try {
+    const windowMin = parseInt(document.getElementById('inp-win').value, 10);
+    const resp = await fetch(`/history?minutes=${windowMin}&limit=1000`);
+    if (!resp.ok) return;
+    const json = await resp.json();
+    json.data
+      .sort((a, b) => a.ts_unix - b.ts_unix)
+      .forEach(m => {
+        BUFFER.push({ x: m.ts_unix * 1000, y: m.level_db });
+        if (m.ts_unix > lastTsUnix) lastTsUnix = m.ts_unix;
+      });
+    updateChart();
+  } catch (_) {}
 }
 
-// ── Stats bar ─────────────────────────────────────────────────────────────────
+// ── Live polling ──────────────────────────────────────────────────────────────
+
+async function pollCurrent() {
+  try {
+    const resp = await fetch('/current');
+    if (resp.ok) {
+      const m = await resp.json();
+      if (m.ts_unix > lastTsUnix) {
+        lastTsUnix = m.ts_unix;
+        BUFFER.push({ x: m.ts_unix * 1000, y: m.level_db });
+        updateChart();
+        updateDisplay(m);
+        markLive(true);
+      }
+    }
+  } catch (_) { markLive(false); }
+
+  const stale = lastTsUnix === 0 || (Date.now() / 1000 - lastTsUnix > 5);
+  document.getElementById('disp-db').classList.toggle('stale', stale);
+
+  setTimeout(pollCurrent, 2_000);
+}
+
+async function pollHealth() {
+  try {
+    const h = await (await fetch('/health')).json();
+    const dot = document.getElementById('dot');
+    const txt = document.getElementById('status-txt');
+    dot.className = 'dot ' + (h.connected ? 'ok' : 'err');
+    txt.textContent = h.connected ? 'Verbunden' : (h.error || 'Getrennt');
+  } catch (_) {
+    document.getElementById('dot').className = 'dot err';
+    document.getElementById('status-txt').textContent = 'Keine API';
+  }
+  setTimeout(pollHealth, 10_000);
+}
+
+// ── Display ───────────────────────────────────────────────────────────────────
+
+function updateDisplay(m) {
+  const el = document.getElementById('disp-db');
+  el.textContent = m.level_db.toFixed(1) + ' dB';
+  el.className   = 'display-db' + (m.overflow ? ' over' : m.level_db >= 80 ? ' warn' : '');
+
+  document.getElementById('disp-meta').textContent =
+    `dB(${m.weighting}) · ${m.response}`;
+  document.getElementById('disp-time').textContent =
+    new Date(m.ts_unix * 1000).toLocaleTimeString('de-DE');
+}
+
+function markLive(active) {
+  document.getElementById('pulse').className = 'pulse' + (active ? '' : ' paused');
+  document.getElementById('live-txt').textContent = active ? 'Live' : 'Kein Signal';
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
 
 function setStats(min, max, avg, count) {
   const fmt = v => v != null ? v.toFixed(1) + ' dB' : '–';
   document.getElementById('s-min').textContent = fmt(min);
   document.getElementById('s-max').textContent = fmt(max);
   document.getElementById('s-avg').textContent = fmt(avg);
-  document.getElementById('s-cnt').textContent =
-    count != null ? count.toLocaleString('de-DE') : '–';
+  document.getElementById('s-cnt').textContent = count != null ? count.toLocaleString('de-DE') : '–';
 }
 
-// ── Live reading ──────────────────────────────────────────────────────────────
+// ── Window change ─────────────────────────────────────────────────────────────
 
-async function pollLive() {
-  const [healthResp, currentResp] = await Promise.all([
-    fetch('/health').catch(() => null),
-    fetch('/current').catch(() => null),
-  ]);
-
-  const dot = document.getElementById('dot');
-  const txt = document.getElementById('status-txt');
-  if (healthResp) {
-    try {
-      const h = await healthResp.json();
-      dot.className = 'dot ' + (h.connected ? 'ok' : 'err');
-      txt.textContent = h.connected ? 'Verbunden' : (h.error || 'Getrennt');
-    } catch (_) { dot.className = 'dot err'; txt.textContent = 'Keine Verbindung zur API'; }
+async function onWindowChange() {
+  const windowMin  = parseInt(document.getElementById('inp-win').value, 10);
+  const newCutoff  = Date.now() - windowMin * 60_000;
+  const bufferedFrom = BUFFER.length ? BUFFER[0].x : Infinity;
+  if (newCutoff < bufferedFrom) {
+    BUFFER.length = 0;
+    lastTsUnix = 0;
+    await loadInitial();
   } else {
-    dot.className = 'dot err';
-    txt.textContent = 'Keine Verbindung zur API';
+    updateChart();
   }
-
-  if (currentResp?.ok) {
-    try {
-      const m = await currentResp.json();
-      const dbEl   = document.getElementById('live-db');
-      const metaEl = document.getElementById('live-meta');
-      dbEl.textContent = m.level_db.toFixed(1) + ' dB';
-      dbEl.className   = 'live-db' + (m.overflow ? ' over' : '');
-      const t = new Date(m.ts_unix * 1000).toLocaleTimeString('de-DE');
-      metaEl.textContent = `dB(${m.weighting}) · ${m.response} · ${t}`;
-    } catch (_) {}
-  }
-}
-
-function scheduleLive() {
-  pollLive();
-  clearTimeout(liveTimer);
-  liveTimer = setTimeout(scheduleLive, 30_000);
-}
-
-// ── Auto-refresh ──────────────────────────────────────────────────────────────
-
-function setupAutoRefresh() {
-  const cb = document.getElementById('inp-auto');
-
-  function arm() {
-    clearTimeout(autoTimer);
-    if (cb.checked) {
-      autoTimer = setTimeout(() => { loadData(); arm(); }, 60_000);
-    }
-  }
-
-  cb.addEventListener('change', arm);
-  arm();
 }
 </script>
 </body>

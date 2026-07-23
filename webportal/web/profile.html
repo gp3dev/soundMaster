@@ -8,6 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="/nav.css">
   <script src="/nav.js" defer></script>
+  <script src="/station.js" defer></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -61,17 +62,18 @@
     </button>
     <div class="nav-menu" id="nav-menu">
       <a href="/"         class="nav-item">📊 Verlauf</a>
-      <a href="/live"     class="nav-item">📡 Live</a>
       <a href="/profile"  class="nav-item active">📈 Tagesganglinie</a>
       <a href="/calendar" class="nav-item">📅 Kalender</a>
       <a href="/daily"    class="nav-item">📋 Tages-Pegel</a>
       <a href="/export"   class="nav-item">💾 Export</a>
       <a href="/map"      class="nav-item">🗺️ Karte</a>
       <a href="/settings" class="nav-item">⚙️ Einstellungen</a>
+      <a href="/stations" class="nav-item">📶 Messstellen</a>
       <a href="/docs"     class="nav-item" target="_blank">📖 API Docs</a>
     </div>
   </div>
   <h1>Tagesganglinie</h1>
+  <select id="station-picker" style="margin-left:8px"></select>
   <button class="theme-btn" id="theme-btn" onclick="themeToggle()" aria-label="Thema wechseln">☀</button>
 </header>
 
@@ -116,6 +118,7 @@
 
 let chart = null;
 let profileByHour = {};
+let SM_STATION = null;
 
 const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 window.addEventListener('themechange', () => { if (chart) chart.update('none'); });
@@ -125,11 +128,13 @@ let _cachedLimits = {
   night: parseFloat(localStorage.getItem('sm_limit_night') ?? 45),
 };
 
-fetch('/api/settings').then(r => r.ok ? r.json() : null).then(s => {
-  if (!s) return;
-  _cachedLimits = { day: s.limit_day ?? _cachedLimits.day, night: s.limit_night ?? _cachedLimits.night };
-  if (chart) chart.update('none');
-}).catch(() => {});
+function loadCachedLimits(station) {
+  fetch(`/api/settings?station=${station}`).then(r => r.ok ? r.json() : null).then(s => {
+    if (!s) return;
+    _cachedLimits = { day: s.limit_day ?? _cachedLimits.day, night: s.limit_night ?? _cachedLimits.night };
+    if (chart) chart.update('none');
+  }).catch(() => {});
+}
 
 function loadLimits() { return _cachedLimits; }
 
@@ -231,7 +236,7 @@ async function loadData() {
   const until = document.getElementById('inp-until').value;
   if (!since || !until) return;
   try {
-    const resp = await fetch(`/stats/hourly-profile?since=${since}T00:00:00&until=${until}T23:59:59`);
+    const resp = await fetch(`/stats/hourly-profile?station=${SM_STATION}&since=${since}T00:00:00&until=${until}T23:59:59`);
     if (!resp.ok) return;
     renderChart(await resp.json(), since, until);
   } catch(e) { console.error(e); }
@@ -280,7 +285,11 @@ function renderChart(json, since, until) {
   chart.update('none');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  const { slug } = await smInitPicker();
+  SM_STATION = slug;
+  if (!SM_STATION) return;
+  loadCachedLimits(SM_STATION);
   initChart();
   setDays(7, document.getElementById('btn7'));
 });

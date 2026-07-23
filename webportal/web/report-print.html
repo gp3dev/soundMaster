@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lärmbericht – A6 Dechendorf</title>
+  <title>Lärmbericht</title>
+  <script src="/station.js" defer></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -174,10 +175,10 @@ function getParam(name) {
 
 let _cachedSettings = null;
 
-async function loadSettings() {
+async function loadSettings(station) {
   if (_cachedSettings) return _cachedSettings;
   try {
-    const res = await fetch('/api/settings');
+    const res = await fetch(`/api/settings?station=${station}`);
     if (res.ok) _cachedSettings = await res.json();
   } catch (_) {}
   return _cachedSettings;
@@ -202,12 +203,13 @@ function delta(v, limit) {
 async function buildReport() {
   const since = getParam('since');
   const until = getParam('until');
-  if (!since || !until) {
-    document.getElementById('loading').textContent = 'Fehler: Kein Zeitraum angegeben.';
+  const station = getParam('station');
+  if (!since || !until || !station) {
+    document.getElementById('loading').textContent = 'Fehler: Kein Zeitraum/keine Messstelle angegeben.';
     return;
   }
 
-  const s = await loadSettings();
+  const s = await loadSettings(station);
   const { day: limDay, night: limNight } = loadLimits(s);
   const locName = s?.location_name || localStorage.getItem('sm_location_name') || 'Messstelle';
   const now = new Date();
@@ -227,7 +229,7 @@ async function buildReport() {
   document.getElementById('footer-date').textContent = now.toLocaleString('de-DE');
 
   try {
-    const resp = await fetch(`/stats/daily?since=${since}&until=${until}`);
+    const resp = await fetch(`/stats/daily?station=${station}&since=${since}&until=${until}`);
     if (!resp.ok) throw new Error(resp.status);
     const json = await resp.json();
     const rows = json.data;

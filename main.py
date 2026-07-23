@@ -11,7 +11,6 @@ Verwendung:
   python main.py --api-port 8080         # API-Port ändern
 """
 
-import getpass
 import queue
 import signal
 import sys
@@ -20,7 +19,7 @@ import time
 
 import config
 import db as database
-import auth
+from forwarder import Forwarder
 from reader import SerialReader, probe, resolve_port
 from api import ApiServer, set_connection_state
 
@@ -66,25 +65,6 @@ if __name__ == "__main__":
         probe(cfg.serial.port)
         sys.exit(0)
 
-    # ── Reset-Password-Modus ───────────────────────────────────────────────
-    if cfg.reset_password:
-        database.init(cfg.db_path)
-        try:
-            pw1 = getpass.getpass("Neues Passwort: ")
-            pw2 = getpass.getpass("Passwort bestätigen: ")
-        except KeyboardInterrupt:
-            print("\nAbgebrochen.")
-            sys.exit(0)
-        if pw1 != pw2:
-            print("Fehler: Passwörter stimmen nicht überein.")
-            sys.exit(1)
-        if not pw1:
-            print("Fehler: Passwort darf nicht leer sein.")
-            sys.exit(1)
-        database.auth_set("password_hash", auth.hash_password(pw1))
-        print("Passwort erfolgreich gesetzt.")
-        sys.exit(0)
-
     # ── Port-Erkennung ─────────────────────────────────────────────────────
     cfg.serial.port = resolve_port(cfg.serial.port)
 
@@ -96,20 +76,6 @@ if __name__ == "__main__":
 
     # ── Normal mode ────────────────────────────────────────────────────────
     database.init(cfg.db_path)
-
-    # ── Auth setup ─────────────────────────────────────────────────────────
-    stored_hash = database.auth_get("password_hash")
-    if stored_hash is None:
-        import secrets as _sec
-        import string as _str
-        _alphabet = _str.ascii_letters + _str.digits
-        _password = "".join(_sec.choice(_alphabet) for _ in range(16))
-        stored_hash = auth.hash_password(_password)
-        database.auth_set("password_hash", stored_hash)
-        print(f"\n{'=' * 60}")
-        print(f"  Admin-Passwort (nur einmalig angezeigt): {_password}")
-        print(f"{'=' * 60}\n")
-    auth.init(stored_hash)
 
     # Shared queue: reader → (tui_display + db_writer)
     # We use two separate queues so the TUI gets its own copy
@@ -168,6 +134,12 @@ if __name__ == "__main__":
     status_thread = threading.Thread(target=_status_updater, daemon=True, name="status")
     status_thread.start()
 
+    # Forwarder: pushes buffered measurements to the Webportal (if configured)
+    forwarder = None
+    if cfg.webportal.url:
+        forwarder = Forwarder(cfg.webportal, stop_event)
+        forwarder.start()
+
     # ── TUI or headless ────────────────────────────────────────────────────
     if cfg.no_tui:
         def _handle_sigint(sig, frame):
@@ -185,4 +157,6 @@ if __name__ == "__main__":
     reader.stop()
     api_server.stop()
     db_thread.join(timeout=3)
+    if forwarder is not None:
+        forwarder.join(timeout=3)
     print("Auf Wiedersehen.")
