@@ -237,6 +237,7 @@ Umgebungsvariablen (`webportal/config.py`):
 | `GET /api/settings?station=<slug>` | — | Aktuelle Einstellungen (optional `?at=<ISO8601>` für historischen Stand) |
 | `GET /api/settings/history?station=<slug>` | — | Alle Einstellungs-Perioden chronologisch |
 | `POST /api/settings?station=<slug>` | ✓ | Neue Einstellungs-Periode anlegen |
+| `PUT /api/settings/{id}` | ✓ | Bestehende Einstellungs-Periode nachträglich ändern (z. B. Grenzwerte rückwirkend korrigieren); nicht übergebene Felder bleiben unverändert |
 | `DELETE /api/settings/{id}` | ✓ | Einstellungs-Eintrag löschen |
 
 #### Stationsverwaltung

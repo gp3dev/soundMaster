@@ -188,6 +188,14 @@
     }
     .btn-del:hover { border-color: #e53935; color: #e53935; }
     .empty-hint { color: var(--muted); font-size: 12px; font-style: italic; }
+    .edit-hint {
+      font-size: 12px;
+      color: var(--yellow);
+      background: rgba(255, 193, 7, .1);
+      border: 1px solid var(--yellow);
+      border-radius: 4px;
+      padding: 6px 10px;
+    }
   </style>
 </head>
 <body>
@@ -248,9 +256,11 @@
   </div>
 
   <div class="field">
-    <label for="inp-valid-from-loc">Gültig ab (leer = jetzt)</label>
+    <label for="inp-valid-from-loc" id="lbl-valid-from">Gültig ab (leer = jetzt)</label>
     <input type="datetime-local" id="inp-valid-from-loc">
   </div>
+
+  <div class="edit-hint" id="edit-hint" style="display:none"></div>
 
   <div class="actions">
     <button class="btn" onclick="saveAll()">Speichern</button>
@@ -289,7 +299,8 @@
   <div class="limit-preview" id="preview"></div>
 
   <div class="actions">
-    <button class="btn" onclick="saveAll()">Speichern</button>
+    <button class="btn" onclick="saveAll()" id="btn-save">Speichern</button>
+    <button class="btn-del" onclick="cancelEdit()" id="btn-cancel-edit" style="display:none">Abbrechen</button>
     <span class="saved-msg" id="saved-msg">Gespeichert ✓</span>
   </div>
 </div>
@@ -333,6 +344,8 @@ const ZONES = {
 };
 
 let SM_STATION = null;
+let editingId = null;
+let historyData = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Auth-Prüfung: nicht-authentifizierte Benutzer zur Login-Seite schicken
@@ -434,9 +447,12 @@ async function saveAll() {
   const body = { limit_day: day, limit_night: night, location_name: name,
                  lat, lon, zone, comment, valid_from };
 
+  const url    = editingId ? `/api/settings/${editingId}` : `/api/settings?station=${SM_STATION}`;
+  const method = editingId ? 'PUT' : 'POST';
+
   try {
-    const res = await fetch(`/api/settings?station=${SM_STATION}`, {
-      method: 'POST',
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
@@ -454,9 +470,13 @@ async function saveAll() {
     if (lon != null) localStorage.setItem('sm_lon', lon);
     else             localStorage.removeItem('sm_lon');
 
-    // Reset aux fields
-    document.getElementById('inp-comment-loc').value  = '';
-    document.getElementById('inp-valid-from-loc').value = '';
+    if (editingId) {
+      cancelEdit();
+    } else {
+      // Reset aux fields
+      document.getElementById('inp-comment-loc').value  = '';
+      document.getElementById('inp-valid-from-loc').value = '';
+    }
 
     syncMapBtn();
     ['saved-msg-loc', 'saved-msg'].forEach(id => {
@@ -468,6 +488,51 @@ async function saveAll() {
   } catch (e) {
     alert('Fehler beim Speichern: ' + e.message);
   }
+}
+
+function editSettings(id) {
+  const s = historyData.find(r => r.id === id);
+  if (!s) return;
+  editingId = id;
+
+  document.getElementById('inp-day').value   = s.limit_day   ?? '';
+  document.getElementById('inp-night').value = s.limit_night ?? '';
+  document.getElementById('inp-zone').value  = s.zone || '';
+  document.getElementById('inp-name').value  = s.location_name || '';
+  document.getElementById('inp-lat').value   = s.lat ?? '';
+  document.getElementById('inp-lon').value   = s.lon ?? '';
+  // Left empty on purpose: sending them unset keeps the stored comment/valid_from
+  // untouched (PUT only overwrites fields present in the request).
+  document.getElementById('inp-comment-loc').value    = '';
+  document.getElementById('inp-valid-from-loc').value = '';
+
+  updatePreview();
+  syncMapBtn();
+
+  const vfText = new Date(s.valid_from).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+  document.getElementById('lbl-valid-from').textContent = `Gültig ab (leer = unverändert, aktuell ${vfText})`;
+  document.getElementById('btn-save').textContent = 'Änderung speichern';
+  document.getElementById('btn-cancel-edit').style.display = '';
+  const hint = document.getElementById('edit-hint');
+  hint.textContent = `Bearbeite bestehenden Zeitraum ab ${vfText} — Änderungen werden rückwirkend übernommen.`;
+  hint.style.display = '';
+
+  document.querySelector('h1').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelEdit() {
+  editingId = null;
+  document.getElementById('lbl-valid-from').textContent = 'Gültig ab (leer = jetzt)';
+  document.getElementById('btn-save').textContent = 'Speichern';
+  document.getElementById('btn-cancel-edit').style.display = 'none';
+  document.getElementById('edit-hint').style.display = 'none';
+  document.getElementById('inp-valid-from-loc').value = '';
+  document.getElementById('inp-comment-loc').value = '';
+
+  fetch(`/api/settings?station=${SM_STATION}`)
+    .then(res => res.ok ? res.json() : null)
+    .then(s => { if (s) applyToForm(s); updatePreview(); syncMapBtn(); })
+    .catch(() => {});
 }
 
 async function deleteSettings(id) {
@@ -487,6 +552,7 @@ async function loadHistory() {
     const res = await fetch(`/api/settings/history?station=${SM_STATION}`);
     if (!res.ok) throw new Error();
     const { data } = await res.json();
+    historyData = data;
     if (!data.length) {
       wrap.innerHTML = '<span class="empty-hint">Noch keine Einstellungen gespeichert.</span>';
       return;
@@ -506,7 +572,10 @@ async function loadHistory() {
         <td class="td-day">${tag}</td>
         <td class="td-night">${nacht}</td>
         <td>${esc(zone)}</td>
-        <td><button class="btn-del" onclick="deleteSettings(${s.id})">Löschen</button></td>
+        <td style="white-space:nowrap">
+          <button class="btn-del" onclick="editSettings(${s.id})">Bearbeiten</button>
+          <button class="btn-del" onclick="deleteSettings(${s.id})">Löschen</button>
+        </td>
       </tr>`;
     }).join('');
     wrap.innerHTML = `<table class="history-table">

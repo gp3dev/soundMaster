@@ -349,6 +349,12 @@ def settings_list(station_id: int) -> list[Settings]:
     return [_row_to_settings(r) for r in rows]
 
 
+def settings_get_by_id(id: int) -> Optional[Settings]:
+    """Return a single settings record by its id, regardless of station or validity."""
+    row = _conn().execute("SELECT * FROM settings WHERE id = ?", (id,)).fetchone()
+    return _row_to_settings(row) if row else None
+
+
 def settings_save(station_id: int, s: Settings) -> int:
     """Insert a new settings record for a station, return its id."""
     now = time.time()
@@ -364,6 +370,29 @@ def settings_save(station_id: int, s: Settings) -> int:
     )
     c.commit()
     return cur.lastrowid
+
+
+def settings_update(id: int, s: Settings) -> bool:
+    """Update an existing settings record in place (e.g. retroactive corrections).
+
+    Unlike settings_save(), this modifies the row itself rather than adding a new
+    period, so it doesn't shift the record's position in the valid_from history.
+    Raises sqlite3.IntegrityError if the new valid_from collides with another
+    record of the same station.
+    """
+    c = _conn()
+    cur = c.execute(
+        """
+        UPDATE settings
+        SET valid_from = ?, location_name = ?, lat = ?, lon = ?, zone = ?,
+            limit_day = ?, limit_night = ?, comment = ?
+        WHERE id = ?
+        """,
+        (s.valid_from, s.location_name, s.lat, s.lon, s.zone,
+         s.limit_day, s.limit_night, s.comment, id),
+    )
+    c.commit()
+    return cur.rowcount > 0
 
 
 def settings_delete(id: int) -> bool:

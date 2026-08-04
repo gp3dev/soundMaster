@@ -1,6 +1,7 @@
 import csv
 import io
 import os
+import sqlite3
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -371,6 +372,42 @@ def api_settings_post(body: SettingsIn, station: str = Query(..., description="S
     database.settings_save(st.id, s)
     saved = database.settings_get(st.id, valid_from)
     return _settings_to_dict(saved)
+
+
+@app.put("/api/settings/{id}", dependencies=[Depends(_require_auth)])
+def api_settings_put(id: int, body: SettingsIn):
+    """Update an existing settings period in place (e.g. to correct limits retroactively).
+
+    Fields left out of the request body keep their current value; unlike POST this
+    never creates a new period, so the record's position in the history is preserved
+    unless valid_from is explicitly changed.
+    """
+    existing = database.settings_get_by_id(id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Settings record not found")
+
+    valid_from = existing.valid_from
+    if body.valid_from is not None:
+        try:
+            valid_from = datetime.fromisoformat(body.valid_from).timestamp()
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid valid_from: {e}")
+
+    updated = database.Settings(
+        valid_from=valid_from,
+        location_name=body.location_name if body.location_name is not None else existing.location_name,
+        lat=body.lat if body.lat is not None else existing.lat,
+        lon=body.lon if body.lon is not None else existing.lon,
+        zone=body.zone if body.zone is not None else existing.zone,
+        limit_day=body.limit_day if body.limit_day is not None else existing.limit_day,
+        limit_night=body.limit_night if body.limit_night is not None else existing.limit_night,
+        comment=body.comment if body.comment is not None else existing.comment,
+    )
+    try:
+        database.settings_update(id, updated)
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="Für diesen Zeitpunkt existiert bereits ein anderer Eintrag")
+    return _settings_to_dict(database.settings_get_by_id(id))
 
 
 @app.delete("/api/settings/{id}", status_code=204, dependencies=[Depends(_require_auth)])
