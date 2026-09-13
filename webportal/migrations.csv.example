@@ -1,0 +1,4 @@
+source,station_name,station_slug
+/tmp/backup_maerz.db,Messstelle Nord,messstelle-nord
+/tmp/backup_april.db,Messstelle Nord,messstelle-nord
+/tmp/backup_alt_ohne_zuordnung.db,Unzugeordnet,unzugeordnet

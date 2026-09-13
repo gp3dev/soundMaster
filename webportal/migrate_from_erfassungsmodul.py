@@ -12,6 +12,8 @@ Usage:
       --source ~/.local/share/soundmaster/measurements.db \\
       --target /data/webportal.db \\
       --station-name "Default" --station-slug default
+
+To import many backups at once (e.g. across several stations), see migrate_batch.py.
 """
 
 import argparse
@@ -24,27 +26,19 @@ import auth
 import db as database
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", required=True, help="Path to the old combined-app SQLite DB")
-    parser.add_argument("--target", required=True, help="Path to the Webportal SQLite DB")
-    parser.add_argument("--station-name", default="Default", help="Display name for the station")
-    parser.add_argument("--station-slug", default="default", help="URL slug for the station")
-    args = parser.parse_args()
+def migrate_one(source_path: Path, target_path: Path, station_name: str, station_slug: str) -> dict:
+    """Import one old-format SQLite DB into the Webportal DB under the given station.
 
-    source_path = Path(args.source).expanduser()
-    target_path = Path(args.target).expanduser()
-    if not source_path.exists():
-        print(f"Fehler: Quelle nicht gefunden: {source_path}", file=sys.stderr)
-        sys.exit(1)
-
+    Assumes database.init(target_path) has already been called. Returns a dict with
+    counts (and, if a new station was created, its freshly issued API key).
+    """
     database.init(target_path)
 
-    station = database.station_get_by_slug(args.station_slug)
+    station = database.station_get_by_slug(station_slug)
     printed_key = None
     if station is None:
         raw_key = secrets.token_urlsafe(32)
-        station = database.station_create(args.station_name, args.station_slug,
+        station = database.station_create(station_name, station_slug,
                                           auth.hash_password(raw_key))
         printed_key = raw_key
         print(f"Station '{station.name}' (slug={station.slug}) angelegt.")
@@ -91,12 +85,41 @@ def main() -> None:
     s_after = len(database.settings_list(station.id))
     print(f"Einstellungen: {len(s_rows)} in Quelle, {s_after - s_before} neu eingefügt.")
 
+    src.close()
+
+    return {
+        "source": str(source_path),
+        "station_slug": station.slug,
+        "measurements_total": len(measurements),
+        "measurements_inserted": inserted,
+        "settings_total": len(s_rows),
+        "settings_inserted": s_after - s_before,
+        "api_key": printed_key,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", required=True, help="Path to the old combined-app SQLite DB")
+    parser.add_argument("--target", required=True, help="Path to the Webportal SQLite DB")
+    parser.add_argument("--station-name", default="Default", help="Display name for the station")
+    parser.add_argument("--station-slug", default="default", help="URL slug for the station")
+    args = parser.parse_args()
+
+    source_path = Path(args.source).expanduser()
+    target_path = Path(args.target).expanduser()
+    if not source_path.exists():
+        print(f"Fehler: Quelle nicht gefunden: {source_path}", file=sys.stderr)
+        sys.exit(1)
+
+    r = migrate_one(source_path, target_path, args.station_name, args.station_slug)
+
     print("\n(Die 'auth'-Tabelle der Quelle wird bewusst NICHT übernommen — "
           "das Webportal bootstrapt seinen eigenen Admin-Zugang.)")
 
-    if printed_key:
+    if r["api_key"]:
         print(f"\n{'=' * 60}")
-        print(f"  API-Key für Station '{station.slug}' (nur jetzt sichtbar): {printed_key}")
+        print(f"  API-Key für Station '{r['station_slug']}' (nur jetzt sichtbar): {r['api_key']}")
         print(f"  In config.toml [webportal] api_key des Erfassungsmoduls eintragen.")
         print(f"{'=' * 60}")
 
