@@ -11,10 +11,22 @@ Rebuild/Neustart unangetastet.
 
 ## 1. Vorher: Datenbank sichern
 
+Das Image basiert auf `python:3.13-slim` und enthält keine `sqlite3`-CLI, wohl
+aber das Python-Modul `sqlite3` (Standardbibliothek). Backup daher über die
+`backup()`-API von Python — funktioniert auch bei laufendem Schreibbetrieb
+konsistent, ohne den Container anzuhalten:
+
 ```bash
 cd /pfad/zum/repo/webportal
-docker compose exec webportal \
-  sqlite3 /data/webportal.db ".backup /data/webportal-backup-$(date +%Y%m%d-%H%M%S).db"
+docker compose exec webportal python -c "
+import sqlite3, datetime
+name = f'/data/webportal-backup-{datetime.datetime.now():%Y%m%d-%H%M%S}.db'
+src = sqlite3.connect('/data/webportal.db')
+dst = sqlite3.connect(name)
+src.backup(dst)
+dst.close(); src.close()
+print(name)
+"
 
 # Backup zur Sicherheit auch auf den Host kopieren:
 docker cp "$(docker compose ps -q webportal)":/data/ ./backups-$(date +%Y%m%d)/
