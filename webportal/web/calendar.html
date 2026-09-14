@@ -33,7 +33,22 @@
     .cal-wrap {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 6px; overflow: hidden;
+      position: relative;
     }
+    .cal-loading {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--surface);
+      z-index: 5;
+    }
+    .cal-spinner {
+      width: 28px; height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: cal-spin .7s linear infinite;
+    }
+    @keyframes cal-spin { to { transform: rotate(360deg); } }
     .cal-grid {
       display: grid; grid-template-columns: repeat(7, 1fr);
     }
@@ -152,6 +167,7 @@
       ☀️ Tag (L_Tag vs. Grenzwert Tag) &nbsp;·&nbsp; 🌙 Nacht (L_Nacht vs. Grenzwert Nacht)
     </div>
   </div>
+  <div class="cal-loading" id="cal-loading"><div class="cal-spinner"></div></div>
 </div>
 
 <div class="stats">
@@ -208,6 +224,12 @@ function shiftMonth(delta) {
   loadMonth();
 }
 
+let _calLoadToken = 0;
+
+function setCalLoading(show) {
+  document.getElementById('cal-loading').style.display = show ? 'flex' : 'none';
+}
+
 async function loadMonth() {
   document.getElementById('month-label').textContent =
     `${MONTHS_DE[currentMonth]} ${currentYear}`;
@@ -216,11 +238,18 @@ async function loadMonth() {
   const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
   const until = `${currentYear}-${String(currentMonth + 1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
+  const token = ++_calLoadToken;
+  setCalLoading(true);
   try {
     const resp = await fetch(`/stats/daily?station=${SM_STATION}&since=${since}T00:00:00&until=${until}T23:59:59`);
+    if (token !== _calLoadToken) return; // a newer month was requested meanwhile
     if (!resp.ok) return;
     renderCalendar(await resp.json(), currentYear, currentMonth);
-  } catch(e) { console.error(e); }
+  } catch(e) {
+    console.error(e);
+  } finally {
+    if (token === _calLoadToken) setCalLoading(false);
+  }
 }
 
 function makeCell(classes, label, db, sub) {
@@ -313,7 +342,7 @@ function renderCalendar(json, year, month) {
 document.addEventListener('DOMContentLoaded', async () => {
   const { slug } = await smInitPicker();
   SM_STATION = slug;
-  if (!SM_STATION) return;
+  if (!SM_STATION) { setCalLoading(false); return; }
   loadCachedLimits(SM_STATION);
   loadMonth();
 });
