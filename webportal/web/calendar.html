@@ -29,6 +29,13 @@
       cursor: pointer; font-size: 13px; font-family: inherit;
     }
     .btn:hover { background: var(--nav-hover); }
+    #month-picker {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 5px 10px; border-radius: 4px;
+      font-size: 13px; font-family: inherit;
+      margin-left: 8px;
+    }
+    #month-picker:focus { outline: 1px solid var(--blue); }
 
     .cal-wrap {
       background: var(--surface); border: 1px solid var(--border);
@@ -146,6 +153,8 @@
   <button class="btn" onclick="shiftMonth(-1)">&#8592;</button>
   <h2 id="month-label">–</h2>
   <button class="btn" onclick="shiftMonth(+1)">&#8594;</button>
+  <input type="month" id="month-picker" onchange="onMonthPicked()">
+  <button class="btn" onclick="goToCurrentMonth()">Heute</button>
 </div>
 
 <div class="cal-wrap">
@@ -224,6 +233,27 @@ function shiftMonth(delta) {
   loadMonth();
 }
 
+function syncMonthPicker() {
+  document.getElementById('month-picker').value =
+    `${currentYear}-${String(currentMonth + 1).padStart(2,'0')}`;
+}
+
+function onMonthPicked() {
+  const val = document.getElementById('month-picker').value; // "YYYY-MM"
+  if (!val) return;
+  const [y, m] = val.split('-').map(Number);
+  currentYear  = y;
+  currentMonth = m - 1;
+  loadMonth();
+}
+
+function goToCurrentMonth() {
+  const now = new Date();
+  currentYear  = now.getFullYear();
+  currentMonth = now.getMonth();
+  loadMonth();
+}
+
 let _calLoadToken = 0;
 
 function setCalLoading(show) {
@@ -233,6 +263,7 @@ function setCalLoading(show) {
 async function loadMonth() {
   document.getElementById('month-label').textContent =
     `${MONTHS_DE[currentMonth]} ${currentYear}`;
+  syncMonthPicker();
 
   const since = `${currentYear}-${String(currentMonth + 1).padStart(2,'0')}-01`;
   const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
