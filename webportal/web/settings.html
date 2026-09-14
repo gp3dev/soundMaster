@@ -277,11 +277,19 @@
     <label for="inp-zone">Gebietstyp (Voreinstellung)</label>
     <select id="inp-zone" onchange="applyZone()">
       <option value="">– Benutzerdefiniert –</option>
-      <option value="rein">Reine Wohngebiete</option>
-      <option value="allgemein">Allgemeine Wohngebiete</option>
-      <option value="dorf">Dorf- und Mischgebiete</option>
-      <option value="gewerbe">Gewerbegebiete</option>
-      <option value="industrie">Industriegebiete</option>
+      <optgroup label="TA Lärm (Gewerbe- / Industrielärm)">
+        <option value="rein">Reine Wohngebiete</option>
+        <option value="allgemein">Allgemeine Wohngebiete</option>
+        <option value="dorf">Dorf- und Mischgebiete</option>
+        <option value="gewerbe">Gewerbegebiete</option>
+        <option value="industrie">Industriegebiete</option>
+      </optgroup>
+      <optgroup label="16. BImSchV (Straßen-/Schienenverkehr, z. B. Autobahn)">
+        <option value="verkehr_schutz">Krankenhäuser, Schulen, Kurheime, Altenheime</option>
+        <option value="verkehr_wohn">Reine/Allgemeine Wohngebiete, Kleinsiedlungen</option>
+        <option value="verkehr_misch">Kern-, Dorf- und Mischgebiete</option>
+        <option value="verkehr_gewerbe">Gewerbegebiete</option>
+      </optgroup>
     </select>
   </div>
 
@@ -332,15 +340,41 @@
   </table>
 </div>
 
+<div class="card">
+  <h2>Referenz – Immissionsgrenzwerte 16. BImSchV (Straßen-/Schienenverkehr)</h2>
+  <table class="zone-table">
+    <thead>
+      <tr>
+        <th>Gebietsart</th>
+        <th class="td-day">Tag</th>
+        <th class="td-night">Nacht</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Krankenhäuser, Schulen, Kurheime, Altenheime u. ä.</td> <td class="td-day">57 dB(A)</td><td class="td-night">47 dB(A)</td></tr>
+      <tr><td>Reine/Allgemeine Wohngebiete, Kleinsiedlungsgebiete</td><td class="td-day">59 dB(A)</td><td class="td-night">49 dB(A)</td></tr>
+      <tr><td>Kern-, Dorf- und Mischgebiete</td>                     <td class="td-day">64 dB(A)</td><td class="td-night">54 dB(A)</td></tr>
+      <tr><td>Gewerbegebiete</td>                                    <td class="td-day">69 dB(A)</td><td class="td-night">59 dB(A)</td></tr>
+    </tbody>
+  </table>
+  <span class="empty-hint">Gilt für Bau/wesentliche Änderung von Straßen und Schienenwegen (§ 2 16. BImSchV) — maßgeblich z. B. für Messstellen neben einer Autobahn, anders als die TA-Lärm-Richtwerte oben.</span>
+</div>
+
 <script>
 'use strict';
 
 const ZONES = {
-  rein:       { day: 50, night: 35 },
-  allgemein:  { day: 55, night: 40 },
-  dorf:       { day: 60, night: 45 },
-  gewerbe:    { day: 65, night: 50 },
-  industrie:  { day: 70, night: 70 },
+  // TA Lärm (Gewerbe-/Industrielärm)
+  rein:             { day: 50, night: 35 },
+  allgemein:        { day: 55, night: 40 },
+  dorf:             { day: 60, night: 45 },
+  gewerbe:          { day: 65, night: 50 },
+  industrie:        { day: 70, night: 70 },
+  // 16. BImSchV § 2 (Straßen-/Schienenverkehr, z. B. Autobahn)
+  verkehr_schutz:   { day: 57, night: 47 },
+  verkehr_wohn:     { day: 59, night: 49 },
+  verkehr_misch:    { day: 64, night: 54 },
+  verkehr_gewerbe:  { day: 69, night: 59 },
 };
 
 let SM_STATION = null;
