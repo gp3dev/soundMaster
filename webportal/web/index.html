@@ -298,11 +298,43 @@ function loadCachedLimits(station) {
   fetch(`/api/settings?station=${station}`).then(r => r.ok ? r.json() : null).then(s => {
     if (!s) return;
     _cachedLimits = { day: s.limit_day ?? _cachedLimits.day, night: s.limit_night ?? _cachedLimits.night };
+    updateLimitStepDataset();
     if (chart) chart.update('none');
   }).catch(() => {});
 }
 
 function loadLimits() { return _cachedLimits; }
+
+function isDayHour(date) {
+  const h = date.getHours();
+  return h >= 6 && h < 22;
+}
+
+// Baut eine Stufenlinie des zur jeweiligen Uhrzeit gültigen Grenzwerts
+// (Tag 06–22 Uhr / Nacht 22–06 Uhr, siehe 16. BImSchV) für den Zeitraum [sinceMs, untilMs).
+function buildLimitStepSeries(sinceMs, untilMs, limDay, limNight) {
+  const points = [{ x: sinceMs, y: isDayHour(new Date(sinceMs)) ? limDay : limNight }];
+  const probe = new Date(sinceMs);
+  probe.setHours(0, 0, 0, 0);
+  while (probe.getTime() <= untilMs) {
+    for (const hour of [6, 22]) {
+      const t = new Date(probe.getFullYear(), probe.getMonth(), probe.getDate(), hour, 0, 0).getTime();
+      if (t > sinceMs && t < untilMs) points.push({ x: t, y: hour === 6 ? limDay : limNight });
+    }
+    probe.setDate(probe.getDate() + 1);
+  }
+  points.push({ x: untilMs, y: points[points.length - 1].y });
+  return points;
+}
+
+let _lastRange = null;
+
+function updateLimitStepDataset() {
+  if (!chart || !_lastRange) return;
+  const { since, until } = _lastRange;
+  const { day, night } = loadLimits();
+  chart.data.datasets[3].data = buildLimitStepSeries(since.getTime(), until.getTime(), day, night);
+}
 
 const limitPlugin = {
   id: 'limitLines',
@@ -402,6 +434,12 @@ function initChart() {
           data: [], borderColor: '#4caf50', backgroundColor: 'transparent',
           borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.2,
         },
+        // Dataset 3: zur jeweiligen Uhrzeit gültiger Grenzwert (Tag/Nacht-Stufenlinie)
+        {
+          label: 'Grenzwert (gültig)', data: [], stepped: 'after',
+          borderColor: '#f44336', backgroundColor: 'transparent',
+          borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false,
+        },
       ]
     },
     plugins: [limitPlugin],
@@ -411,7 +449,14 @@ function initChart() {
       animation: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: true,
+          labels: {
+            color: () => cssVar('--text'),
+            filter: item => item.datasetIndex === 3,
+            boxWidth: 16,
+          }
+        },
         tooltip: {
           backgroundColor: '#111',
           borderColor: '#333',
@@ -475,6 +520,7 @@ async function loadData() {
 
   try {
     const { since, until } = getRange();
+    _lastRange = { since, until };
     const url = `/history/aggregate?station=${SM_STATION}&since=${since.toISOString()}&until=${until.toISOString()}&buckets=200`;
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -490,6 +536,7 @@ async function loadData() {
     chart.data.datasets[2].data = leqPts;
     chart.options.scales.x.min = since.getTime();
     chart.options.scales.x.max = until.getTime();
+    updateLimitStepDataset();
 
     if (rows.length > 0) {
       const globalMin = Math.min(...rows.map(r => r.min_db));
