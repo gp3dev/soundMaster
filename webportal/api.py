@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -68,6 +68,11 @@ def _measurement_to_dict(m) -> dict:
         "overflow": m.overflow,
         "underflow": m.underflow,
     }
+
+
+@app.get("/live", include_in_schema=False)
+def web_live_redirect():
+    return RedirectResponse(url="/")
 
 
 @app.get("/login", include_in_schema=False)
