@@ -310,57 +310,85 @@ function isDayHour(date) {
   return h >= 6 && h < 22;
 }
 
-// Baut eine Stufenlinie des zur jeweiligen Uhrzeit gültigen Grenzwerts
-// (Tag 06–22 Uhr / Nacht 22–06 Uhr, siehe 16. BImSchV) für den Zeitraum [sinceMs, untilMs).
-function buildLimitStepSeries(sinceMs, untilMs, limDay, limNight) {
-  const points = [{ x: sinceMs, y: isDayHour(new Date(sinceMs)) ? limDay : limNight }];
+// Berechnet zusammenhängende Tag-/Nacht-Abschnitte (06–22 Uhr / 22–06 Uhr,
+// siehe 16. BImSchV) für den Zeitraum [sinceMs, untilMs).
+function buildDayNightSegments(sinceMs, untilMs) {
+  const bounds = [sinceMs];
   const probe = new Date(sinceMs);
   probe.setHours(0, 0, 0, 0);
   while (probe.getTime() <= untilMs) {
     for (const hour of [6, 22]) {
       const t = new Date(probe.getFullYear(), probe.getMonth(), probe.getDate(), hour, 0, 0).getTime();
-      if (t > sinceMs && t < untilMs) points.push({ x: t, y: hour === 6 ? limDay : limNight });
+      if (t > sinceMs && t < untilMs) bounds.push(t);
     }
     probe.setDate(probe.getDate() + 1);
   }
-  points.push({ x: untilMs, y: points[points.length - 1].y });
-  return points;
+  bounds.push(untilMs);
+  bounds.sort((a, b) => a - b);
+
+  const segments = [];
+  for (let i = 0; i < bounds.length - 1; i++) {
+    segments.push({ start: bounds[i], end: bounds[i + 1], isDay: isDayHour(new Date(bounds[i])) });
+  }
+  return segments;
 }
 
 let _lastRange = null;
+let _daynightSegments = [];
 
 function updateLimitStepDataset() {
   if (!chart || !_lastRange) return;
   const { since, until } = _lastRange;
   const { day, night } = loadLimits();
-  chart.data.datasets[3].data = buildLimitStepSeries(since.getTime(), until.getTime(), day, night);
+
+  _daynightSegments = buildDayNightSegments(since.getTime(), until.getTime());
+
+  const points = _daynightSegments.map(seg => ({ x: seg.start, y: seg.isDay ? day : night }));
+  const lastVal = points.length ? points[points.length - 1].y : (isDayHour(since) ? day : night);
+  points.push({ x: until.getTime(), y: lastVal });
+
+  chart.data.datasets[3].data = points;
 }
 
-const limitPlugin = {
-  id: 'limitLines',
+const DAY_BAND_COLOR   = 'rgba(255,193,7,0.025)';
+const NIGHT_BAND_COLOR = 'rgba(79,195,247,0.03)';
+
+const dayNightPlugin = {
+  id: 'dayNightBands',
+  beforeDraw(chart) {
+    const { ctx, chartArea, scales } = chart;
+    if (!chartArea || !_daynightSegments.length) return;
+    ctx.save();
+    _daynightSegments.forEach(seg => {
+      const xStart = Math.max(chartArea.left,  scales.x.getPixelForValue(seg.start));
+      const xEnd   = Math.min(chartArea.right, scales.x.getPixelForValue(seg.end));
+      if (xEnd <= xStart) return;
+      ctx.fillStyle = seg.isDay ? DAY_BAND_COLOR : NIGHT_BAND_COLOR;
+      ctx.fillRect(xStart, chartArea.top, xEnd - xStart, chartArea.height);
+    });
+    ctx.restore();
+  },
   afterDraw(chart) {
     const { ctx, chartArea, scales } = chart;
-    if (!chartArea) return;
+    if (!chartArea || !_daynightSegments.length) return;
     const { day, night } = loadLimits();
-    [
-      [day,   '#ffc107', `Tag ${day} dB(A)`],
-      [night, '#4fc3f7', `Nacht ${night} dB(A)`],
-    ].forEach(([val, color, label]) => {
-      const y = scales.y.getPixelForValue(val);
+    ctx.save();
+    ctx.font = '11px Segoe UI,system-ui,sans-serif';
+    ctx.textAlign = 'center';
+    _daynightSegments.forEach(seg => {
+      const xStart = Math.max(chartArea.left,  scales.x.getPixelForValue(seg.start));
+      const xEnd   = Math.min(chartArea.right, scales.x.getPixelForValue(seg.end));
+      if (xEnd <= xStart) return;
+      const value = seg.isDay ? day : night;
+      const label = `${seg.isDay ? 'Tag' : 'Nacht'} ${value} dB(A)`;
+      const textWidth = ctx.measureText(label).width;
+      if (xEnd - xStart < textWidth + 12) return; // Segment zu schmal fürs Label
+      const y = scales.y.getPixelForValue(value);
       if (y < chartArea.top || y > chartArea.bottom) return;
-      ctx.save();
-      ctx.beginPath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.setLineDash([6, 4]);
-      ctx.moveTo(chartArea.left, y);
-      ctx.lineTo(chartArea.right, y);
-      ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.font = '11px Segoe UI,system-ui,sans-serif';
-      ctx.fillText(label, chartArea.left + 6, y - 4);
-      ctx.restore();
+      ctx.fillStyle = seg.isDay ? '#ffc107' : '#4fc3f7';
+      ctx.fillText(label, (xStart + xEnd) / 2, y - 6);
     });
+    ctx.restore();
   }
 };
 
@@ -442,7 +470,7 @@ function initChart() {
         },
       ]
     },
-    plugins: [limitPlugin],
+    plugins: [dayNightPlugin],
     options: {
       responsive: true,
       maintainAspectRatio: false,
