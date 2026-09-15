@@ -86,6 +86,8 @@
     }
     .qf-btn:hover { background: var(--blue); border-color: var(--blue); color: #fff; }
     .qf-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .qf-btn:disabled { opacity: .4; cursor: default; }
+    .qf-btn:disabled:hover { background: transparent; border-color: var(--border); color: var(--text); }
     input[type=date], input[type=time], select {
       background: var(--bg);
       border: 1px solid var(--border);
@@ -220,6 +222,9 @@
     <button class="qf-btn" onclick="setQuickRange(this,720)">30 Tage</button>
   </div>
   <div class="ctrl">
+    <button class="qf-btn" onclick="pageRange(-1)" title="Zeitraum zurück" aria-label="Zeitraum zurück">◀</button>
+  </div>
+  <div class="ctrl">
     <label for="inp-date">Datum</label>
     <input type="date" id="inp-date" oninput="clearQuickRange()">
   </div>
@@ -239,6 +244,9 @@
       <option value="168">7 Tage</option>
       <option value="720">30 Tage</option>
     </select>
+  </div>
+  <div class="ctrl">
+    <button class="qf-btn" onclick="pageRange(1)" id="btn-fwd" title="Zeitraum vor" aria-label="Zeitraum vor">▶</button>
   </div>
   <button class="btn" id="load-btn" onclick="loadData()">
     <div class="spinner" id="spin"></div>
@@ -415,6 +423,28 @@ function clearQuickRange() {
   document.querySelectorAll('.qf-btn').forEach(b => b.classList.remove('active'));
 }
 
+function pageRange(direction) {
+  const hours = parseInt(document.getElementById('inp-dur').value) || 24;
+  const { since } = getRange();
+  let newSince = new Date(since.getTime() + direction * hours * 3600_000);
+  if (direction > 0) {
+    const maxSince = new Date(Date.now() - hours * 3600_000);
+    if (newSince > maxSince) newSince = maxSince;
+  }
+  document.getElementById('inp-date').value = fmtDate(newSince);
+  document.getElementById('inp-time').value = fmtTime(newSince);
+  clearQuickRange();
+  loadData();
+}
+
+function updateNavButtons() {
+  const hours = parseInt(document.getElementById('inp-dur').value) || 24;
+  const { since } = getRange();
+  // Toleranz, da "Von" nur minutengenau ist (Rundungsverlust beim Zurückrechnen ab "jetzt").
+  const atPresent = since.getTime() >= Date.now() - hours * 3600_000 - 120_000;
+  document.getElementById('btn-fwd').disabled = atPresent;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -549,6 +579,7 @@ async function loadData() {
   try {
     const { since, until } = getRange();
     _lastRange = { since, until };
+    updateNavButtons();
     const url = `/history/aggregate?station=${SM_STATION}&since=${since.toISOString()}&until=${until.toISOString()}&buckets=200`;
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
